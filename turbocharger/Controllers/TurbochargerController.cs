@@ -86,8 +86,8 @@ public class TurbochargerController : ControllerBase
 
         var node = new BomTreeDto
         {
-            ItemId = item.item_id,
-            ItemName = item.item_name,
+            ItemId = item.ItemId,
+            ItemName = item.ItemName,
             Level = level,
             TotalQuantity = quantity,
             Children = new List<BomTreeDto>()
@@ -95,16 +95,16 @@ public class TurbochargerController : ControllerBase
 
         var children = await _context.BOM
             .Include(b => b.Component)
-            .Where(b => b.parent_id == itemId)
+            .Where(b => b.ParentId == itemId)
             .ToListAsync();
 
         foreach (var child in children)
         {
-            var childNode = await BuildTree(child.component_id, child.quantity, level + 1);
+            var childNode = await BuildTree(child.ComponentId, child.Quantity, level + 1);
             if (childNode != null)
             {
                 // Умножаем количество дочерних элементов на количество родителей
-                childNode.TotalQuantity = quantity * child.quantity;
+                childNode.TotalQuantity = quantity * child.Quantity;
                 node.Children.Add(childNode);
             }
         }
@@ -116,7 +116,7 @@ public class TurbochargerController : ControllerBase
     {
         var children = await _context.BOM
             .Include(b => b.Component)
-            .Where(b => b.parent_id == itemId)
+            .Where(b => b.ParentId == itemId)
             .ToListAsync();
 
         foreach (var child in children)
@@ -125,13 +125,13 @@ public class TurbochargerController : ControllerBase
 
             flatList.Add(new BomTreeDto
             {
-                ItemId = childItem.item_id,
-                ItemName = childItem.item_name,
-                TotalQuantity = quantity * child.quantity
+                ItemId = childItem.ItemId,
+                ItemName = childItem.ItemName,
+                TotalQuantity = quantity * child.Quantity
             });
 
             // Рекурсивно обрабатываем вложенные компоненты
-            await BuildFlatList(childItem.item_id, quantity * child.quantity, flatList);
+            await BuildFlatList(childItem.ItemId, quantity * child.Quantity, flatList);
         }
     }
 
@@ -141,15 +141,15 @@ public class TurbochargerController : ControllerBase
         if (item == null) return;
 
         var indent = new string(' ', level * 2);
-        sb.AppendLine($"{indent}├─ {item.item_name} (ID: {item.item_id}) [x{quantity}]");
+        sb.AppendLine($"{indent}├─ {item.ItemName} (ID: {item.ItemId}) [x{quantity}]");
 
         var children = await _context.BOM
-            .Where(b => b.parent_id == itemId)
+            .Where(b => b.ParentId == itemId)
             .ToListAsync();
 
         foreach (var child in children)
         {
-            await BuildStructureText(child.component_id, child.quantity, level + 1, sb);
+            await BuildStructureText(child.ComponentId, child.Quantity, level + 1, sb);
         }
     }
 }

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Turbocharger MRP System</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="logo">
+                <h1> Turbocharger MRP</h1>
+            </div>
+            <nav class="menu">
+                <button class="menu-item active" data-view="items"> Номенклатура</button>
+                <button class="menu-item" data-view="bom"> Структура сборки</button>
+                <button class="menu-item" data-view="hierarchy"> Дерево иерархии</button>
+                <button class="menu-item" data-view="calculator"> Расчёт потребности</button>
+                <button class="menu-item" data-view="warehouse"> Склад</button>
+            </nav>
+        </header>
+
+        <main class="content">
+            <!-- Вкладка Номенклатура -->
+            <div id="items-view" class="view active">
+                <div class="view-header">
+                    <h2>Номенклатура</h2>
+                    <button class="btn btn-primary" id="add-item-btn">+ Добавить деталь</button>
+                </div>
+                <div class="toolbar">
+                    <input type="text" class="search" id="search-input" placeholder="Поиск по наименованию...">
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Наименование</th>
+                                <th>Остаток</th>
+                                <th>Цена</th>
+                                <th>Стоимость на складе</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="items-table"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Вкладка Структура сборки (BOM) -->
+            <div id="bom-view" class="view">
+                <div class="view-header">
+                    <h2>Структура сборки</h2>
+                    <div class="bom-controls">
+                        <label for="bom-root-select">Корневой элемент:</label>
+                        <select id="bom-root-select"></select>
+                        <button class="btn btn-primary" id="add-bom-btn">+ Добавить связь</button>
+                    </div>
+                </div>
+                <div class="tree-container" id="bom-tree">
+                    <p class="placeholder">Выберите корневой элемент</p>
+                </div>
+            </div>
+
+            <!-- Вкладка Дерево иерархии -->
+            <div id="hierarchy-view" class="view">
+                <div class="view-header">
+                    <h2>Дерево иерархии</h2>
+                    <div class="bom-controls">
+                        <label for="hierarchy-root-select">Корневой элемент:</label>
+                        <select id="hierarchy-root-select"></select>
+                    </div>
+                </div>
+                <div class="hierarchy-container" id="hierarchy-tree">
+                    <p class="placeholder">Выберите корневой элемент</p>
+                </div>
+            </div>
+
+            <!-- Вкладка Расчёт потребности -->
+            <div id="calculator-view" class="view">
+                <div class="view-header">
+                    <h2>Расчёт потребности материалов</h2>
+                </div>
+                <div class="calculator">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="calc-item-select">Изделие:</label>
+                            <select id="calc-item-select"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="calc-quantity">Количество:</label>
+                            <input type="number" id="calc-quantity" value="1" min="1">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" id="calc-btn">Рассчитать</button>
+                    <div class="results" id="calc-results"></div>
+                </div>
+            </div>
+
+            <!-- Вкладка Склад -->
+            <div id="warehouse-view" class="view">
+                <div class="view-header">
+                    <h2>Складские операции</h2>
+                    <button class="btn btn-primary" id="add-operation-btn">+ Новая операция</button>
+                </div>
+                <div class="warehouse-content">
+                    <div class="stock-summary">
+                        <h3>Текущие остатки</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Наименование</th>
+                                        <th>Остаток</th>
+                                        <th>Цена</th>
+                                        <th>Общая стоимость</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stock-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="operations-history">
+                        <h3>История операций</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Дата</th>
+                                        <th>Элемент</th>
+                                        <th>Тип</th>
+                                        <th>Количество</th>
+                                        <th>Цена</th>
+                                        <th>Комментарий</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="operations-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Модальное окно для элемента -->
+    <div class="modal" id="item-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="item-modal-title">Добавить деталь</h3>
+                <button class="close-btn" id="item-modal-close">&times;</button>
+            </div>
+            <form id="item-form">
+                <input type="hidden" id="item-id">
+                <div class="form-group">
+                    <label for="item-name">Наименование</label>
+                    <input type="text" id="item-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="item-price">Цена за единицу</label>
+                    <input type="number" id="item-price" step="0.01" min="0" value="0">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" id="item-modal-cancel">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для связи BOM -->
+    <div class="modal" id="bom-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="bom-modal-title">Добавить связь</h3>
+                <button class="close-btn" id="bom-modal-close">&times;</button>
+            </div>
+            <form id="bom-form">
+                <input type="hidden" id="bom-id">
+                <div class="form-group">
+                    <label for="bom-parent">Родитель</label>
+                    <select id="bom-parent" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="bom-component">Компонент</label>
+                    <select id="bom-component" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="bom-quantity">Количество</label>
+                    <input type="number" id="bom-quantity" value="1" min="1" required>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" id="bom-modal-cancel">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно для складской операции -->
+    <div class="modal" id="operation-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="operation-modal-title">Новая операция</h3>
+                <button class="close-btn" id="operation-modal-close">&times;</button>
+            </div>
+            <form id="operation-form">
+                <div class="form-group">
+                    <label for="op-item">Номенклатура:</label>
+                    <select id="op-item" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="op-type">Тип операции:</label>
+                    <select id="op-type" required>
+                        <option value="Income">Приход</option>
+                        <option value="Expense">Расход</option>
+                        <option value="Adjustment">Корректировка</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="op-quantity">Количество:</label>
+                    <input type="number" id="op-quantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="op-price">Цена за единицу:</label>
+                    <input type="number" id="op-price" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="op-comment">Комментарий:</label>
+                    <textarea id="op-comment" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" id="operation-modal-cancel">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/script.js"></script>
+</body>
+</html>

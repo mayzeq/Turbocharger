@@ -29,12 +29,12 @@ public class BomController : ControllerBase
             .Include(b => b.Component)
             .Select(b => new BomResponseDto
             {
-                BomId = b.bom_id,
-                ParentId = b.parent_id,
-                ParentName = b.Parent != null ? b.Parent.item_name : null,
-                ComponentId = b.component_id,
-                ComponentName = b.Component.item_name,
-                Quantity = b.quantity
+                BomId = b.BomId,
+                ParentId = b.ParentId,
+                ParentName = b.Parent != null ? b.Parent.ItemName : null,
+                ComponentId = b.ComponentId,
+                ComponentName = b.Component.ItemName,
+                Quantity = b.Quantity
             })
             .ToListAsync();
 
@@ -52,15 +52,15 @@ public class BomController : ControllerBase
         var bom = await _context.BOM
             .Include(b => b.Parent)
             .Include(b => b.Component)
-            .Where(b => b.bom_id == id)
+            .Where(b => b.BomId == id)
             .Select(b => new BomResponseDto
             {
-                BomId = b.bom_id,
-                ParentId = b.parent_id,
-                ParentName = b.Parent != null ? b.Parent.item_name : null,
-                ComponentId = b.component_id,
-                ComponentName = b.Component.item_name,
-                Quantity = b.quantity
+                BomId = b.BomId,
+                ParentId = b.ParentId,
+                ParentName = b.Parent != null ? b.Parent.ItemName : null,
+                ComponentId = b.ComponentId,
+                ComponentName = b.Component.ItemName,
+                Quantity = b.Quantity
             })
             .FirstOrDefaultAsync();
 
@@ -78,20 +78,20 @@ public class BomController : ControllerBase
     [HttpGet("by-parent/{parentId}")]
     public async Task<ActionResult<IEnumerable<BomResponseDto>>> GetBomsByParent(int parentId)
     {
-        var parentExists = await _context.Item.AnyAsync(i => i.item_id == parentId);
+        var parentExists = await _context.Item.AnyAsync(i => i.ItemId == parentId);
         if (!parentExists)
             return NotFound($"Родитель с ID {parentId} не найден");
 
         var boms = await _context.BOM
             .Include(b => b.Component)
-            .Where(b => b.parent_id == parentId)
+            .Where(b => b.ParentId == parentId)
             .Select(b => new BomResponseDto
             {
-                BomId = b.bom_id,
-                ParentId = b.parent_id,
-                ComponentId = b.component_id,
-                ComponentName = b.Component.item_name,
-                Quantity = b.quantity
+                BomId = b.BomId,
+                ParentId = b.ParentId,
+                ComponentId = b.ComponentId,
+                ComponentName = b.Component.ItemName,
+                Quantity = b.Quantity
             })
             .ToListAsync();
 
@@ -125,17 +125,17 @@ public class BomController : ControllerBase
 
         // Проверка на дубликат
         bool exists = await _context.BOM.AnyAsync(b =>
-            b.parent_id == dto.ParentId &&
-            b.component_id == dto.ComponentId);
+            b.ParentId == dto.ParentId &&
+            b.ComponentId == dto.ComponentId);
 
         if (exists)
             return BadRequest("Такая связь уже существует");
 
         var bom = new Bom
         {
-            parent_id = dto.ParentId,
-            component_id = dto.ComponentId,
-            quantity = dto.Quantity > 0 ? dto.Quantity : 1
+            ParentId = dto.ParentId,
+            ComponentId = dto.ComponentId,
+            Quantity = dto.Quantity > 0 ? dto.Quantity : 1
         };
 
         _context.BOM.Add(bom);
@@ -147,12 +147,12 @@ public class BomController : ControllerBase
 
         var response = new BomResponseDto
         {
-            BomId = bom.bom_id,
-            ParentId = bom.parent_id,
-            ParentName = bom.Parent?.item_name,
-            ComponentId = bom.component_id,
-            ComponentName = bom.Component.item_name,
-            Quantity = bom.quantity
+            BomId = bom.BomId,
+            ParentId = bom.ParentId,
+            ParentName = bom.Parent?.ItemName,
+            ComponentId = bom.ComponentId,
+            ComponentName = bom.Component.ItemName,
+            Quantity = bom.Quantity
         };
 
         return CreatedAtAction(nameof(GetBom), new { id = response.BomId }, response);
@@ -172,21 +172,21 @@ public class BomController : ControllerBase
             return NotFound($"Связь BOM с ID {id} не найдена");
 
         // Проверка существования компонента
-        if (!await _context.Item.AnyAsync(i => i.item_id == dto.ComponentId))
+        if (!await _context.Item.AnyAsync(i => i.ItemId == dto.ComponentId))
             return BadRequest($"Компонент с ID {dto.ComponentId} не существует");
 
-        if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.item_id == dto.ParentId))
+        if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.ItemId == dto.ParentId))
             return BadRequest($"Родительский элемент с ID {dto.ParentId} не существует");
 
         // Проверка на циклическую зависимость (если меняется структура)
-        if ((bom.parent_id != dto.ParentId || bom.component_id != dto.ComponentId) &&
+        if ((bom.ParentId != dto.ParentId || bom.ComponentId != dto.ComponentId) &&
             dto.ParentId.HasValue &&
             await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
             return BadRequest("Создание циклической зависимости запрещено");
 
-        bom.parent_id = dto.ParentId;
-        bom.component_id = dto.ComponentId;
-        bom.quantity = dto.Quantity > 0 ? dto.Quantity : 1;
+        bom.ParentId = dto.ParentId;
+        bom.ComponentId = dto.ComponentId;
+        bom.Quantity = dto.Quantity > 0 ? dto.Quantity : 1;
 
         await _context.SaveChangesAsync();
 
@@ -230,8 +230,8 @@ public class BomController : ControllerBase
     private async Task GetDescendants(int itemId, HashSet<int> descendants)
     {
         var children = await _context.BOM
-            .Where(b => b.parent_id == itemId)
-            .Select(b => b.component_id)
+            .Where(b => b.ParentId == itemId)
+            .Select(b => b.ComponentId)
             .ToListAsync();
 
         foreach (var childId in children)

@@ -27,8 +27,10 @@ public class ItemController : ControllerBase
         var items = await _context.Item
             .Select(i => new ItemResponseDto
             {
-                ItemId = i.item_id,
-                ItemName = i.item_name
+                ItemId = i.ItemId,
+                ItemName = i.ItemName,
+                CurrentQuantity = i.CurrentQuantity,
+                PurchasePrice = i.PurchasePrice
             })
             .ToListAsync();
 
@@ -44,11 +46,14 @@ public class ItemController : ControllerBase
     public async Task<ActionResult<ItemResponseDto>> GetItem(int id)
     {
         var item = await _context.Item
-            .Where(i => i.item_id == id)
+            .Where(i => i.ItemId == id)
             .Select(i => new ItemResponseDto
             {
-                ItemId = i.item_id,
-                ItemName = i.item_name
+                ItemId = i.ItemId,
+                ItemName = i.ItemName,
+                CurrentQuantity = i.CurrentQuantity,
+                PurchasePrice = i.PurchasePrice
+
             })
             .FirstOrDefaultAsync();
 
@@ -71,7 +76,8 @@ public class ItemController : ControllerBase
 
         var item = new Item
         {
-            item_name = dto.ItemName
+            ItemName = dto.ItemName,
+            PurchasePrice = dto.PurchasePrice
         };
 
         _context.Item.Add(item);
@@ -79,8 +85,10 @@ public class ItemController : ControllerBase
 
         var response = new ItemResponseDto
         {
-            ItemId = item.item_id,
-            ItemName = item.item_name
+            ItemId = item.ItemId,
+            ItemName = item.ItemName,
+            CurrentQuantity = item.CurrentQuantity,
+            PurchasePrice = item.PurchasePrice
         };
 
         return CreatedAtAction(nameof(GetItem), new { id = response.ItemId }, response);
@@ -102,10 +110,18 @@ public class ItemController : ControllerBase
         if (item == null)
             return NotFound($"Элемент с ID {id} не найден");
 
-        item.item_name = dto.ItemName;
+        item.ItemName = dto.ItemName;
+        item.PurchasePrice = dto.PurchasePrice;
+
         await _context.SaveChangesAsync();
 
-        return NoContent();
+        return Ok(new ItemResponseDto
+        {
+            ItemId = item.ItemId,
+            ItemName = item.ItemName,
+            CurrentQuantity = item.CurrentQuantity,
+            PurchasePrice = item.PurchasePrice
+        });
     }
 
     /// <summary>
@@ -121,7 +137,7 @@ public class ItemController : ControllerBase
             return NotFound($"Элемент с ID {id} не найден");
 
         // Проверяем, используется ли элемент в сборках
-        bool isUsed = await _context.BOM.AnyAsync(b => b.parent_id == id || b.component_id == id);
+        bool isUsed = await _context.BOM.AnyAsync(b => b.ParentId == id || b.ComponentId == id);
         if (isUsed)
             return BadRequest("Элемент используется в структуре сборки и не может быть удалён");
 
