@@ -7,9 +7,8 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
-    // DbSet с именами, соответствующими таблицам в скрипте
     public DbSet<Item> Item { get; set; }
-    public DbSet<Bom> BOM { get; set; }  // Именно BOM, как в скрипте
+    public DbSet<Bom> BOM { get; set; }
     public DbSet<WarehouseOperation> WarehouseOperations { get; set; }
     public DbSet<StockBatch> StockBatches { get; set; }
 
@@ -18,7 +17,7 @@ public class AppDbContext : DbContext
         // Конфигурация для Item
         modelBuilder.Entity<Item>(entity =>
         {
-            entity.ToTable("Item");  // явно указываем имя таблицы
+            entity.ToTable("Item");  
             entity.HasKey(e => e.ItemId);
             entity.Property(e => e.ItemName).IsRequired().HasMaxLength(100);
         });
@@ -26,7 +25,7 @@ public class AppDbContext : DbContext
         // Конфигурация для Bom
         modelBuilder.Entity<Bom>(entity =>
         {
-            entity.ToTable("BOM");  // явно указываем имя таблицы
+            entity.ToTable("BOM");  
             entity.HasKey(e => e.BomId);
 
             entity.Property(e => e.Quantity)
@@ -37,13 +36,13 @@ public class AppDbContext : DbContext
             entity.HasOne(b => b.Parent)
                 .WithMany(i => i.ParentBoms)
                 .HasForeignKey(b => b.ParentId)
-                .OnDelete(DeleteBehavior.Cascade);  // ON DELETE CASCADE как в скрипте
+                .OnDelete(DeleteBehavior.Cascade); 
 
             // Связь с компонентом
             entity.HasOne(b => b.Component)
                 .WithMany(i => i.ComponentBoms)
                 .HasForeignKey(b => b.ComponentId)
-                .OnDelete(DeleteBehavior.Cascade);  // ON DELETE CASCADE как в скрипте
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Конфигурация WarehouseOperation

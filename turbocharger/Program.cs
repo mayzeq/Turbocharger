@@ -32,11 +32,9 @@ public class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(options =>
         {
-            // РАСКОММЕНТИРУЙТЕ после того, как XML файл начнет генерироваться
             var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
 
-            // Добавляем XML-комментарии только если файл существует
             if (File.Exists(xmlPath))
             {
                 options.IncludeXmlComments(xmlPath);

@@ -6,8 +6,8 @@ public class Item
     public string ItemName { get; set; } = null!;
 
     // Складские поля
-    public int CurrentQuantity { get; set; }     // текущий остаток на складе
-    public decimal PurchasePrice { get; set; }   // средняя/последняя цена закупки
+    public int CurrentQuantity { get; set; }    
+    public decimal PurchasePrice { get; set; }   
 
     // Навигационные свойства
     public ICollection<Bom> ParentBoms { get; set; } = new List<Bom>();
