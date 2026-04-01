@@ -570,7 +570,7 @@ if (calcBtn) {
                         <span>${item ? item.itemName : 'Неизвестно'} (ID ${compId})</span>
                         <span>
                             <strong>${totalQty}</strong> 
-                            <span class="badge shortage">недостача: ${shortage}</span>
+                            <span class="badge shortage">недостаток: ${shortage}</span>
                         </span>
                     </div>
                 `;

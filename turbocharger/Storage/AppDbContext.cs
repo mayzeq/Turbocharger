@@ -36,13 +36,13 @@ public class AppDbContext : DbContext
             entity.HasOne(b => b.Parent)
                 .WithMany(i => i.ParentBoms)
                 .HasForeignKey(b => b.ParentId)
-                .OnDelete(DeleteBehavior.Cascade); 
+                .OnDelete(DeleteBehavior.Restrict); 
 
             // Связь с компонентом
             entity.HasOne(b => b.Component)
                 .WithMany(i => i.ComponentBoms)
                 .HasForeignKey(b => b.ComponentId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Конфигурация WarehouseOperation
