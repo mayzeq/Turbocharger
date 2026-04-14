@@ -10,6 +10,7 @@ public class WarehouseOperationDto
     public decimal UnitPrice { get; set; }
     public string? Comment { get; set; }
     public DateTime CreatedAt { get; set; }
+    public DateTime OperationDate { get; set; }
 }
 
 public class WarehouseOperationCreateDto
@@ -19,15 +20,5 @@ public class WarehouseOperationCreateDto
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public string? Comment { get; set; }
-}
-
-public class StockBatchDto
-{
-    public int StockBatchId { get; set; }
-    public int ItemId { get; set; }
-    public string ItemName { get; set; } = null!;
-    public int Quantity { get; set; }
-    public int InitialQuantity { get; set; }
-    public decimal UnitPrice { get; set; }
-    public DateTime CreatedAt { get; set; }
+    public DateTime OperationDate { get; set; }
 }

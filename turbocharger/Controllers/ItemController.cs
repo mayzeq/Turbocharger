@@ -136,6 +136,9 @@ public class ItemController : ControllerBase
         if (item == null)
             return NotFound($"Элемент с ID {id} не найден");
 
+        if (item.CurrentQuantity > 0)
+            return BadRequest($"Элемент нельзя удалить: на складе есть остаток ({item.CurrentQuantity}).");
+
         // Проверяем, используется ли элемент в сборках
         bool isUsed = await _context.BOM.AnyAsync(b => b.ParentId == id || b.ComponentId == id);
         if (isUsed)

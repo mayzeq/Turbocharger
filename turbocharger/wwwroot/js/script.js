@@ -6,12 +6,56 @@ let items = [];
 let boms = [];
 let currentRootId = null; // для структуры
 
+function ensureNotificationContainer() {
+    let container = document.getElementById('app-notifications');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'app-notifications';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+function showNotification(message, type = 'error') {
+    const container = ensureNotificationContainer();
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+    container.appendChild(notification);
+
+    setTimeout(() => {
+        notification.classList.add('hide');
+        setTimeout(() => notification.remove(), 250);
+    }, 3500);
+}
+
+function showErrorNotification(message) {
+    showNotification(message, 'error');
+}
+
+async function getApiErrorMessage(response) {
+    const fallback = `Ошибка ${response.status}`;
+    const text = (await response.text())?.trim();
+    if (!text) return fallback;
+
+    try {
+        const parsed = JSON.parse(text);
+        if (typeof parsed === 'string' && parsed.trim()) return parsed;
+        if (parsed?.message) return parsed.message;
+    } catch {
+        // Сервер часто возвращает plain text, это нормальный сценарий.
+    }
+
+    return text;
+}
+
 // Инициализация после загрузки страницы
 document.addEventListener('DOMContentLoaded', () => {
     initMenu();
     initItemModal();
     initBomModal();
     initOperationModal();
+    initOrderModal();
     loadItems();
     loadBoms();
 });
@@ -36,6 +80,8 @@ function initMenu() {
                 updateCalcSelect();
             } else if (btn.dataset.view === 'warehouse') {
                 loadWarehouseData();
+            } else if (btn.dataset.view === 'orders') {
+                loadOrdersData();
             }
         });
     });
@@ -63,10 +109,14 @@ async function loadItems() {
         updateHierarchyRootSelect();
         updateCalcSelect();
         updateBomModalSelects();
+        updateOrderSellableSelect();
 
         // Если активна вкладка склада, обновляем её
         if (document.getElementById('warehouse-view').classList.contains('active')) {
             loadWarehouseData();
+        }
+        if (document.getElementById('orders-view')?.classList.contains('active')) {
+            loadOrdersData();
         }
     } catch (err) {
         alert(err.message);
@@ -624,7 +674,7 @@ async function loadStock() {
              </tr>
         `).join('');
     } catch (err) {
-        alert(err.message);
+        showErrorNotification(err.message);
     }
 }
 
@@ -640,27 +690,29 @@ async function loadOperations() {
         tbody.innerHTML = operations.map(op => {
             const typeNames = {
                 'Income': 'Приход',
-                'Expense': 'Расход',
-                'Adjustment': 'Корректировка'
+                'Expense': 'Расход'
             };
-            const typeClass = op.operationType === 'Income' ? 'income' :
-                op.operationType === 'Expense' ? 'expense' : 'adjustment';
-            const sign = op.operationType === 'Income' ? '+' :
-                op.operationType === 'Expense' ? '-' : '';
+            const typeClass = op.operationType === 'Income' ? 'income' : 'expense';
+            const sign = op.operationType === 'Income' ? '+' : '-';
+            const opDate = op.operationDate ? new Date(op.operationDate).toLocaleDateString('ru-RU') : '—';
 
             return `
                  <tr>
-                    <td>${new Date(op.createdAt).toLocaleString('ru-RU')}</td>
+                    <td>${opDate}</td>
                     <td>${op.itemName} (ID ${op.itemId})</td>
                     <td><span class="badge ${typeClass}">${typeNames[op.operationType]}</span></td>
                     <td>${sign}${op.quantity}</td>
                     <td>${op.unitPrice.toFixed(2)}</td>
                     <td>${op.comment || '—'}</td>
+                    <td class="actions">
+                        <button class="btn btn-sm btn-secondary" onclick="editOperation(${op.operationId})">Изменить</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteOperation(${op.operationId})">Удалить</button>
+                    </td>
                  </tr>
             `;
         }).join('');
     } catch (err) {
-        alert(err.message);
+        showErrorNotification(err.message);
     }
 }
 
@@ -677,6 +729,7 @@ function initOperationModal() {
             document.getElementById('op-type').value = 'Income';
             document.getElementById('op-quantity').value = '';
             document.getElementById('op-price').value = '';
+            document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('op-comment').value = '';
 
             const sortedItems = [...items].sort((a, b) => a.itemId - b.itemId);
@@ -698,25 +751,38 @@ function initOperationModal() {
     if (form) {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            const operationId = form.dataset.operationId;
             const data = {
                 ItemId: parseInt(document.getElementById('op-item').value),
                 OperationType: document.getElementById('op-type').value,
                 Quantity: parseInt(document.getElementById('op-quantity').value),
                 UnitPrice: parseFloat(document.getElementById('op-price').value),
-                Comment: document.getElementById('op-comment').value
+                Comment: document.getElementById('op-comment').value,
+                OperationDate: document.getElementById('op-date').value
             };
 
             try {
-                const response = await fetch(`${API}/Warehouse/operations`, {
-                    method: 'POST',
+                let url, method;
+                if (operationId) {
+                    // Режим редактирования
+                    url = `${API}/Warehouse/operations/${operationId}`;
+                    method = 'PUT';
+                } else {
+                    // Создание новой операции
+                    url = `${API}/Warehouse/operations`;
+                    method = 'POST';
+                }
+
+                const response = await fetch(url, {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Ошибка ${response.status}: ${errorText}`);
+                    throw new Error(await getApiErrorMessage(response));
                 }
                 closeModal();
+                delete form.dataset.operationId;
 
                 // После проведения операции обновляем все данные
                 await loadItems(); // Обновляем остатки в номенклатуре
@@ -729,8 +795,173 @@ function initOperationModal() {
                     if (calcBtn) calcBtn.click();
                 }
             } catch (err) {
-                alert('Не удалось сохранить операцию: ' + err.message);
+                showErrorNotification('Не удалось сохранить операцию: ' + err.message);
             }
         });
     }
+}
+
+// ==================== Редактирование и удаление операций ====================
+
+window.editOperation = async function (id) {
+    // Загружаем операции чтобы найти нужную
+    try {
+        const res = await fetch(`${API}/Warehouse/operations`);
+        if (!res.ok) throw new Error('Ошибка загрузки операций');
+        const operations = await res.json();
+        const op = operations.find(o => o.operationId === id);
+        if (!op) return;
+
+        document.getElementById('operation-modal-title').textContent = 'Редактировать операцию';
+        document.getElementById('op-item').value = op.itemId;
+        document.getElementById('op-type').value = op.operationType;
+        document.getElementById('op-quantity').value = op.quantity;
+        document.getElementById('op-price').value = op.unitPrice;
+        document.getElementById('op-date').value = op.operationDate ? new Date(op.operationDate).toISOString().split('T')[0] : '';
+        document.getElementById('op-comment').value = op.comment || '';
+
+        // Сохраняем ID операции для обновления
+        const form = document.getElementById('operation-form');
+        form.dataset.operationId = id;
+
+        document.getElementById('operation-modal').classList.add('active');
+    } catch (err) {
+        showErrorNotification('Ошибка: ' + err.message);
+    }
+};
+
+window.deleteOperation = async function (id) {
+    if (!confirm('Удалить операцию? Остатки будут пересчитаны.')) return;
+    try {
+        const response = await fetch(`${API}/Warehouse/operations/${id}`, { method: 'DELETE' });
+        if (!response.ok) {
+            showErrorNotification(await getApiErrorMessage(response));
+            return;
+        }
+
+        // После удаления операции обновляем все данные
+        await loadItems();
+        await loadBoms();
+        await loadWarehouseData();
+
+        // Если активен калькулятор, обновляем результаты
+        if (document.getElementById('calculator-view').classList.contains('active')) {
+            const calcBtn = document.getElementById('calc-btn');
+            if (calcBtn) calcBtn.click();
+        }
+    } catch (err) {
+        showErrorNotification('Ошибка при удалении: ' + err.message);
+    }
+};
+
+// ==================== Заказы ====================
+
+async function loadOrdersData() {
+    await loadOrders();
+    await updateOrderSellableSelect();
+}
+
+async function loadOrders() {
+    try {
+        const res = await fetch(`${API}/Order`);
+        if (!res.ok) throw new Error(`Ошибка загрузки заказов: ${res.status}`);
+        const orders = await res.json();
+
+        const tbody = document.getElementById('orders-table');
+        if (!tbody) return;
+
+        tbody.innerHTML = orders.map(order => {
+            const orderDate = order.orderDate ? new Date(order.orderDate).toLocaleDateString('ru-RU') : '—';
+            return `
+                <tr>
+                    <td>${orderDate}</td>
+                    <td>${order.itemName} (ID ${order.itemId})</td>
+                    <td>${order.quantity}</td>
+                    <td>${order.unitPrice.toFixed(2)}</td>
+                    <td>${order.totalAmount.toFixed(2)}</td>
+                    <td>${order.comment || '—'}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        showErrorNotification(err.message);
+    }
+}
+
+async function updateOrderSellableSelect() {
+    const itemSelect = document.getElementById('order-item');
+    if (!itemSelect) return;
+
+    try {
+        const res = await fetch(`${API}/Order/sellable-items`);
+        if (!res.ok) throw new Error(`Ошибка загрузки доступных товаров: ${res.status}`);
+        const sellableItems = await res.json();
+
+        itemSelect.innerHTML = sellableItems.map(item =>
+            `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (остаток: ${Math.floor(item.currentQuantity)})</option>`
+        ).join('');
+    } catch (err) {
+        showErrorNotification(err.message);
+    }
+}
+
+function initOrderModal() {
+    const modal = document.getElementById('order-modal');
+    const openBtn = document.getElementById('add-order-btn');
+    const closeBtn = document.getElementById('order-modal-close');
+    const cancelBtn = document.getElementById('order-modal-cancel');
+    const form = document.getElementById('order-form');
+
+    if (!modal || !form) return;
+
+    const closeModal = () => modal.classList.remove('active');
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+
+    if (openBtn) {
+        openBtn.addEventListener('click', async () => {
+            await updateOrderSellableSelect();
+            document.getElementById('order-quantity').value = '';
+            document.getElementById('order-price').value = '';
+            document.getElementById('order-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('order-comment').value = '';
+            modal.classList.add('active');
+        });
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const data = {
+            ItemId: parseInt(document.getElementById('order-item').value),
+            Quantity: parseInt(document.getElementById('order-quantity').value),
+            UnitPrice: parseFloat(document.getElementById('order-price').value),
+            Comment: document.getElementById('order-comment').value,
+            OrderDate: document.getElementById('order-date').value
+        };
+
+        try {
+            const response = await fetch(`${API}/Order`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                throw new Error(await getApiErrorMessage(response));
+            }
+
+            closeModal();
+            await loadItems();
+            await loadBoms();
+            await loadWarehouseData();
+            await loadOrdersData();
+
+            if (document.getElementById('calculator-view').classList.contains('active')) {
+                document.getElementById('calc-btn')?.click();
+            }
+        } catch (err) {
+            showErrorNotification('Не удалось оформить заказ: ' + err.message);
+        }
+    });
 }

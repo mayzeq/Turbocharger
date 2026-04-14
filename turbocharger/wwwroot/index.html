@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> Turbocharger MRP System</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/style.css?v=3">
 </head>
 <body>
     <div class="app">
@@ -18,6 +18,7 @@
                 <button class="menu-item" data-view="hierarchy"> Дерево иерархии</button>
                 <button class="menu-item" data-view="calculator"> Расчёт потребности</button>
                 <button class="menu-item" data-view="warehouse"> Склад</button>
+                <button class="menu-item" data-view="orders"> Заказы</button>
             </nav>
         </header>
 
@@ -128,18 +129,45 @@
                             <table class="data-table">
                                 <thead>
                                     <tr>
-                                        <th>Дата</th>
+                                        <th>Дата проведения</th>
                                         <th>Элемент</th>
                                         <th>Тип</th>
                                         <th>Количество</th>
                                         <th>Цена</th>
                                         <th>Комментарий</th>
+                                        <th>Действия</th>
                                     </tr>
                                 </thead>
                                 <tbody id="operations-table"></tbody>
                             </table>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Вкладка Заказы -->
+            <div id="orders-view" class="view">
+                <div class="view-header">
+                    <h2>Заказы</h2>
+                    <button class="btn btn-primary" id="add-order-btn">+ Новый заказ</button>
+                </div>
+                <div class="orders-note">
+                    Продавать можно только изделия и узлы (не нижний уровень деталей).
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Дата заказа</th>
+                                <th>Элемент</th>
+                                <th>Количество</th>
+                                <th>Цена продажи</th>
+                                <th>Сумма</th>
+                                <th>Комментарий</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table"></tbody>
+                    </table>
                 </div>
             </div>
         </main>
@@ -219,7 +247,6 @@
                     <select id="op-type" required>
                         <option value="Income">Приход</option>
                         <option value="Expense">Расход</option>
-                        <option value="Adjustment">Корректировка</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -229,6 +256,10 @@
                 <div class="form-group">
                     <label for="op-price">Цена за единицу:</label>
                     <input type="number" id="op-price" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="op-date">Дата операции:</label>
+                    <input type="date" id="op-date" required>
                 </div>
                 <div class="form-group">
                     <label for="op-comment">Комментарий:</label>
@@ -242,6 +273,43 @@
         </div>
     </div>
 
-    <script src="/js/script.js"></script>
+    <!-- Модальное окно для заказа -->
+    <div class="modal" id="order-modal">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Новый заказ</h3>
+                <button class="close-btn" id="order-modal-close">&times;</button>
+            </div>
+            <form id="order-form">
+                <div class="form-group">
+                    <label for="order-item">Товар для продажи:</label>
+                    <select id="order-item" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="order-quantity">Количество:</label>
+                    <input type="number" id="order-quantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="order-price">Цена продажи за единицу:</label>
+                    <input type="number" id="order-price" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="order-date">Дата заказа:</label>
+                    <input type="date" id="order-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="order-comment">Комментарий:</label>
+                    <textarea id="order-comment" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Оформить</button>
+                    <button type="button" class="btn btn-secondary" id="order-modal-cancel">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/js/script.js?v=3"></script>
 </body>
 </html>

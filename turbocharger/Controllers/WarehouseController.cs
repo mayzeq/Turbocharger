@@ -22,7 +22,7 @@ public class WarehouseController : ControllerBase
     {
         var operations = await _context.WarehouseOperations
             .Include(o => o.Item)
-            .OrderByDescending(o => o.CreatedAt)
+            .OrderByDescending(o => o.OperationDate)
             .ToListAsync();
 
         var result = operations.Select(o => new WarehouseOperationDto
@@ -34,7 +34,8 @@ public class WarehouseController : ControllerBase
             Quantity = o.Quantity,
             UnitPrice = o.UnitPrice,
             Comment = o.Comment,
-            CreatedAt = o.CreatedAt
+            CreatedAt = o.CreatedAt,
+            OperationDate = o.OperationDate
         });
 
         return Ok(result);
@@ -49,7 +50,7 @@ public class WarehouseController : ControllerBase
         var operations = await _context.WarehouseOperations
             .Include(o => o.Item)
             .Where(o => o.ItemId == itemId)
-            .OrderByDescending(o => o.CreatedAt)
+            .OrderByDescending(o => o.OperationDate)
             .ToListAsync();
 
         var result = operations.Select(o => new WarehouseOperationDto
@@ -61,35 +62,11 @@ public class WarehouseController : ControllerBase
             Quantity = o.Quantity,
             UnitPrice = o.UnitPrice,
             Comment = o.Comment,
-            CreatedAt = o.CreatedAt
+            CreatedAt = o.CreatedAt,
+            OperationDate = o.OperationDate
         });
 
         return Ok(result);
-    }
-
-    /// <summary>
-    /// Получить все партии (для FIFO).
-    /// </summary>
-    [HttpGet("batches")]
-    public async Task<ActionResult<IEnumerable<StockBatchDto>>> GetBatches()
-    {
-        var batches = await _context.StockBatches
-            .Include(b => b.Item)
-            .Where(b => b.Quantity > 0)
-            .OrderBy(b => b.CreatedAt)
-            .Select(b => new StockBatchDto
-            {
-                StockBatchId = b.StockBatchId,
-                ItemId = b.ItemId,
-                ItemName = b.Item.ItemName,
-                Quantity = b.Quantity,
-                InitialQuantity = b.InitialQuantity,
-                UnitPrice = b.UnitPrice,
-                CreatedAt = b.CreatedAt
-            })
-            .ToListAsync();
-
-        return Ok(batches);
     }
 
     /// <summary>
@@ -104,14 +81,20 @@ public class WarehouseController : ControllerBase
             if (item == null)
                 return BadRequest("Элемент не найден.");
 
+            if (dto.Quantity <= 0)
+                return BadRequest("Количество должно быть больше 0.");
+
+            if (dto.UnitPrice < 0)
+                return BadRequest("Цена за единицу не может быть отрицательной.");
+
             // Проверяем тип операции
-            var validTypes = new[] { "Income", "Expense", "Adjustment" };
+            var validTypes = new[] { "Income", "Expense" };
             if (!validTypes.Contains(dto.OperationType))
-                return BadRequest("Неверный тип операции. Допустимые: Income, Expense, Adjustment.");
+                return BadRequest("Неверный тип операции. Допустимые: Income, Expense.");
 
             // Проверка количества для расхода
             if (dto.OperationType == "Expense" && dto.Quantity > item.CurrentQuantity)
-                return BadRequest($"Недостаточно на складе. Доступно: {item.CurrentQuantity}");
+                return BadRequest($"Невозможно провести расход: недостаточно на складе. Доступно: {item.CurrentQuantity}, требуется: {dto.Quantity}.");
 
             // Создаём операцию
             var operation = new WarehouseOperation
@@ -121,7 +104,8 @@ public class WarehouseController : ControllerBase
                 Quantity = dto.Quantity,
                 UnitPrice = dto.UnitPrice,
                 Comment = dto.Comment,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                OperationDate = DateTime.SpecifyKind(dto.OperationDate, DateTimeKind.Utc)
             };
 
             _context.WarehouseOperations.Add(operation);
@@ -131,42 +115,13 @@ public class WarehouseController : ControllerBase
             {
                 "Income" => dto.Quantity,
                 "Expense" => -dto.Quantity,
-                "Adjustment" => dto.Quantity,
                 _ => 0
             };
 
-            // Логика FIFO для прихода/расхода
+            // Обновляем цену при приходе
             if (dto.OperationType == "Income")
             {
-                // Создаём новую партию
-                var batch = new StockBatch
-                {
-                    ItemId = dto.ItemId,
-                    Quantity = dto.Quantity,
-                    InitialQuantity = dto.Quantity,
-                    UnitPrice = dto.UnitPrice,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.StockBatches.Add(batch);
-
-                // Обновляем цену при приходе
                 item.PurchasePrice = dto.UnitPrice;
-            }
-            else if (dto.OperationType == "Adjustment")
-            {
-                // При корректировке также обновляем цену
-                item.PurchasePrice = dto.UnitPrice;
-
-                // Создаем корректировочную партию
-                var adjustmentBatch = new StockBatch
-                {
-                    ItemId = dto.ItemId,
-                    Quantity = dto.Quantity,
-                    InitialQuantity = dto.Quantity,
-                    UnitPrice = dto.UnitPrice,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.StockBatches.Add(adjustmentBatch);
             }
 
             await _context.SaveChangesAsync();
@@ -180,7 +135,8 @@ public class WarehouseController : ControllerBase
                 Quantity = operation.Quantity,
                 UnitPrice = operation.UnitPrice,
                 Comment = operation.Comment,
-                CreatedAt = operation.CreatedAt
+                CreatedAt = operation.CreatedAt,
+                OperationDate = operation.OperationDate
             });
         }
         catch (Exception ex)
@@ -190,25 +146,152 @@ public class WarehouseController : ControllerBase
     }
 
     /// <summary>
-    /// Обработка расхода по FIFO.
+    /// Изменить складскую операцию.
     /// </summary>
-    private async Task ProcessFifoExpense(int itemId, int quantity)
+    [HttpPut("operations/{operationId}")]
+    public async Task<ActionResult<WarehouseOperationDto>> UpdateOperation(int operationId, [FromBody] WarehouseOperationCreateDto dto)
     {
-        var batches = await _context.StockBatches
-            .Where(b => b.ItemId == itemId && b.Quantity > 0)
-            .OrderBy(b => b.CreatedAt)
-            .ToListAsync();
-
-        var remaining = quantity;
-
-        foreach (var batch in batches)
+        try
         {
-            if (remaining <= 0)
-                break;
+            var operation = await _context.WarehouseOperations
+                .Include(o => o.Item)
+                .FirstOrDefaultAsync(o => o.OperationId == operationId);
 
-            var toDeduct = Math.Min(batch.Quantity, remaining);
-            batch.Quantity -= toDeduct;
-            remaining -= toDeduct;
+            if (operation == null)
+                return NotFound("Операция не найдена.");
+
+            var item = await _context.Item.FindAsync(dto.ItemId);
+            if (item == null)
+                return BadRequest("Элемент не найден.");
+
+            if (dto.Quantity <= 0)
+                return BadRequest("Количество должно быть больше 0.");
+
+            if (dto.UnitPrice < 0)
+                return BadRequest("Цена за единицу не может быть отрицательной.");
+
+            // Проверяем тип операции
+            var validTypes = new[] { "Income", "Expense" };
+            if (!validTypes.Contains(dto.OperationType))
+                return BadRequest("Неверный тип операции. Допустимые: Income, Expense.");
+
+            // Отменяем старую операцию — возвращаем количество
+            item.CurrentQuantity -= operation.OperationType switch
+            {
+                "Income" => operation.Quantity,
+                "Expense" => -operation.Quantity,
+                _ => 0
+            };
+
+            // Проверяем, что остаток не ушёл в минус после отмены
+            if (item.CurrentQuantity < 0)
+            {
+                // Откатываем изменение
+                item.CurrentQuantity += operation.OperationType switch
+                {
+                    "Income" => operation.Quantity,
+                    "Expense" => -operation.Quantity,
+                    _ => 0
+                };
+                return BadRequest($"Невозможно изменить операцию: после отмены текущей операции остаток уйдёт в минус ({item.CurrentQuantity}). Сначала измените или удалите последующие операции расхода.");
+            }
+
+            // Проверяем количество для расхода
+            if (dto.OperationType == "Expense" && dto.Quantity > item.CurrentQuantity)
+            {
+                // Откатываем изменение
+                item.CurrentQuantity += operation.OperationType switch
+                {
+                    "Income" => operation.Quantity,
+                    "Expense" => -operation.Quantity,
+                    _ => 0
+                };
+                return BadRequest($"Невозможно применить операцию: недостаточно на складе. Доступно: {item.CurrentQuantity}, требуется: {dto.Quantity}.");
+            }
+
+            // Применяем новую операцию
+            item.CurrentQuantity += dto.OperationType switch
+            {
+                "Income" => dto.Quantity,
+                "Expense" => -dto.Quantity,
+                _ => 0
+            };
+
+            // Обновляем цену при приходе
+            if (dto.OperationType == "Income")
+            {
+                item.PurchasePrice = dto.UnitPrice;
+            }
+
+            // Обновляем операцию
+            operation.ItemId = dto.ItemId;
+            operation.OperationType = dto.OperationType;
+            operation.Quantity = dto.Quantity;
+            operation.UnitPrice = dto.UnitPrice;
+            operation.Comment = dto.Comment;
+            operation.OperationDate = DateTime.SpecifyKind(dto.OperationDate, DateTimeKind.Utc);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new WarehouseOperationDto
+            {
+                OperationId = operation.OperationId,
+                ItemId = operation.ItemId,
+                ItemName = item.ItemName,
+                OperationType = operation.OperationType,
+                Quantity = operation.Quantity,
+                UnitPrice = operation.UnitPrice,
+                Comment = operation.Comment,
+                CreatedAt = operation.CreatedAt,
+                OperationDate = operation.OperationDate
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Внутренняя ошибка: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Удалить складскую операцию.
+    /// </summary>
+    [HttpDelete("operations/{operationId}")]
+    public async Task<IActionResult> DeleteOperation(int operationId)
+    {
+        try
+        {
+            var operation = await _context.WarehouseOperations
+                .Include(o => o.Item)
+                .FirstOrDefaultAsync(o => o.OperationId == operationId);
+
+            if (operation == null)
+                return NotFound("Операция не найдена.");
+
+            // Рассчитываем остаток после отмены операции
+            var newQuantity = operation.Item.CurrentQuantity - operation.OperationType switch
+            {
+                "Income" => operation.Quantity,
+                "Expense" => -operation.Quantity,
+                _ => 0
+            };
+
+            // Проверяем, что остаток не уйдёт в минус
+            if (newQuantity < 0)
+            {
+                return BadRequest($"Невозможно удалить операцию: после отмены остаток уйдёт в минус ({newQuantity}). Сначала удалите или измените последующие операции расхода.");
+            }
+
+            // Применяем отмену
+            operation.Item.CurrentQuantity = newQuantity;
+
+            _context.WarehouseOperations.Remove(operation);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Операция удалена" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, $"Внутренняя ошибка: {ex.Message}");
         }
     }
 

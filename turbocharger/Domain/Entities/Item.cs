@@ -13,5 +13,5 @@ public class Item
     public ICollection<Bom> ParentBoms { get; set; } = new List<Bom>();
     public ICollection<Bom> ComponentBoms { get; set; } = new List<Bom>();
     public ICollection<WarehouseOperation> WarehouseOperations { get; set; } = new List<WarehouseOperation>();
-    public ICollection<StockBatch> StockBatches { get; set; } = new List<StockBatch>();
+    public ICollection<Order> Orders { get; set; } = new List<Order>();
 }

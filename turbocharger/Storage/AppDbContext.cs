@@ -10,7 +10,22 @@ public class AppDbContext : DbContext
     public DbSet<Item> Item { get; set; }
     public DbSet<Bom> BOM { get; set; }
     public DbSet<WarehouseOperation> WarehouseOperations { get; set; }
-    public DbSet<StockBatch> StockBatches { get; set; }
+    public DbSet<Order> Orders { get; set; }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            foreach (var property in entry.Properties.Where(p => p.Metadata.ClrType == typeof(DateTime) || p.Metadata.ClrType == typeof(DateTime?)))
+            {
+                if (property.CurrentValue is DateTime dt && dt.Kind != DateTimeKind.Utc)
+                {
+                    property.CurrentValue = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+                }
+            }
+        }
+        return base.SaveChangesAsync(cancellationToken);
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,13 +73,16 @@ public class AppDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // Конфигурация StockBatch
-        modelBuilder.Entity<StockBatch>(entity =>
+        // Конфигурация Order
+        modelBuilder.Entity<Order>(entity =>
         {
-            entity.ToTable("StockBatches");
-            entity.HasKey(e => e.StockBatchId);
+            entity.ToTable("Orders");
+            entity.HasKey(e => e.OrderId);
+            entity.Property(e => e.Comment).HasMaxLength(500);
+            entity.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
             entity.HasOne(e => e.Item)
-                .WithMany(i => i.StockBatches)
+                .WithMany(i => i.Orders)
                 .HasForeignKey(e => e.ItemId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

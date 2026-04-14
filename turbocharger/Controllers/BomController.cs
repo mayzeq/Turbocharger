@@ -17,10 +17,6 @@ public class BomController : ControllerBase
         _context = context;
     }
 
-    /// <summary>
-    /// Получить все связи BOM.
-    /// </summary>
-    /// <returns>Список всех связей</returns>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<BomResponseDto>>> GetBoms()
     {
@@ -41,11 +37,6 @@ public class BomController : ControllerBase
         return Ok(boms);
     }
 
-    /// <summary>
-    /// Получить конкретную связь BOM по идентификатору.
-    /// </summary>
-    /// <param name="id">Идентификатор связи</param>
-    /// <returns>Связь BOM или 404</returns>
     [HttpGet("{id}")]
     public async Task<ActionResult<BomResponseDto>> GetBom(int id)
     {
@@ -70,11 +61,6 @@ public class BomController : ControllerBase
         return Ok(bom);
     }
 
-    /// <summary>
-    /// Получить все дочерние компоненты для указанного родителя.
-    /// </summary>
-    /// <param name="parentId">Идентификатор родителя</param>
-    /// <returns>Список дочерних компонентов</returns>
     [HttpGet("by-parent/{parentId}")]
     public async Task<ActionResult<IEnumerable<BomResponseDto>>> GetBomsByParent(int parentId)
     {
@@ -98,33 +84,27 @@ public class BomController : ControllerBase
         return Ok(boms);
     }
 
-    /// <summary>
-    /// Создать новую связь в структуре сборки.
-    /// </summary>
-    /// <param name="dto">Данные для создания</param>
-    /// <returns>Созданная связь</returns>
     [HttpPost]
     public async Task<ActionResult<BomResponseDto>> PostBom([FromBody] BomCreateDto dto)
     {
-        // Проверка существования компонента
+        if (dto.Quantity <= 0)
+            return BadRequest("Количество в структуре должно быть больше 0.");
+
         var component = await _context.Item.FindAsync(dto.ComponentId);
         if (component == null)
             return BadRequest($"Компонент с ID {dto.ComponentId} не существует");
 
-        // Если указан родитель, проверяем его существование
         if (dto.ParentId.HasValue)
         {
             var parent = await _context.Item.FindAsync(dto.ParentId.Value);
             if (parent == null)
                 return BadRequest($"Родительский элемент с ID {dto.ParentId.Value} не существует");
 
-            // Проверка на циклическую зависимость
             if (await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-                return BadRequest("Создание циклической зависимости запрещено");
+                return BadRequest("Добавление этой связи приведет к циклу");
         }
 
-        // Проверка на дубликат
-        bool exists = await _context.BOM.AnyAsync(b =>
+        var exists = await _context.BOM.AnyAsync(b =>
             b.ParentId == dto.ParentId &&
             b.ComponentId == dto.ComponentId);
 
@@ -135,13 +115,12 @@ public class BomController : ControllerBase
         {
             ParentId = dto.ParentId,
             ComponentId = dto.ComponentId,
-            Quantity = dto.Quantity > 0 ? dto.Quantity : 1
+            Quantity = dto.Quantity
         };
 
         _context.BOM.Add(bom);
         await _context.SaveChangesAsync();
 
-        // Загружаем навигационные свойства для ответа
         await _context.Entry(bom).Reference(b => b.Parent).LoadAsync();
         await _context.Entry(bom).Reference(b => b.Component).LoadAsync();
 
@@ -158,52 +137,50 @@ public class BomController : ControllerBase
         return CreatedAtAction(nameof(GetBom), new { id = response.BomId }, response);
     }
 
-    /// <summary>
-    /// Обновить существующую связь BOM.
-    /// </summary>
-    /// <param name="id">Идентификатор связи</param>
-    /// <param name="dto">Новые данные</param>
-    /// <returns>204 No Content или 400/404</returns>
     [HttpPut("{id}")]
     public async Task<IActionResult> PutBom(int id, [FromBody] BomCreateDto dto)
     {
+        if (dto.Quantity <= 0)
+            return BadRequest("Количество в структуре должно быть больше 0.");
+
         var bom = await _context.BOM.FindAsync(id);
         if (bom == null)
             return NotFound($"Связь BOM с ID {id} не найдена");
 
-        // Проверка существования компонента
         if (!await _context.Item.AnyAsync(i => i.ItemId == dto.ComponentId))
             return BadRequest($"Компонент с ID {dto.ComponentId} не существует");
 
         if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.ItemId == dto.ParentId))
             return BadRequest($"Родительский элемент с ID {dto.ParentId} не существует");
 
-        // Проверка на циклическую зависимость (если меняется структура)
         if ((bom.ParentId != dto.ParentId || bom.ComponentId != dto.ComponentId) &&
             dto.ParentId.HasValue &&
             await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-            return BadRequest("Создание циклической зависимости запрещено");
+            return BadRequest("Добавление этой связи приведет к циклу");
 
         bom.ParentId = dto.ParentId;
         bom.ComponentId = dto.ComponentId;
-        bom.Quantity = dto.Quantity > 0 ? dto.Quantity : 1;
+        bom.Quantity = dto.Quantity;
 
         await _context.SaveChangesAsync();
 
         return NoContent();
     }
 
-    /// <summary>
-    /// Удалить связь BOM.
-    /// </summary>
-    /// <param name="id">Идентификатор связи</param>
-    /// <returns>204 No Content или 404</returns>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteBom(int id)
     {
-        var bom = await _context.BOM.FindAsync(id);
+        var bom = await _context.BOM
+            .Include(b => b.Parent)
+            .Include(b => b.Component)
+            .FirstOrDefaultAsync(b => b.BomId == id);
         if (bom == null)
             return NotFound($"Связь BOM с ID {id} не найдена");
+
+        var parentQty = bom.Parent?.CurrentQuantity ?? 0;
+        var componentQty = bom.Component.CurrentQuantity;
+        if (parentQty > 0 || componentQty > 0)
+            return BadRequest($"Нельзя удалить связь: есть остатки на складе. Родитель: {parentQty}, компонент: {componentQty}.");
 
         _context.BOM.Remove(bom);
         await _context.SaveChangesAsync();
@@ -211,16 +188,11 @@ public class BomController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>
-    /// Проверка на создание циклической зависимости.
-    /// </summary>
     private async Task<bool> WouldCreateCycle(int parentId, int componentId)
     {
-        // Если компонент пытается стать родителем самого себя
         if (parentId == componentId)
             return true;
 
-        // Проверяем, не является ли родитель потомком компонента
         var descendants = new HashSet<int>();
         await GetDescendants(componentId, descendants);
 
