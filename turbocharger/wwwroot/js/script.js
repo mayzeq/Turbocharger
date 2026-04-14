@@ -209,8 +209,7 @@ window.deleteItem = async function (id) {
     try {
         const response = await fetch(`${API}/Item/${id}`, { method: 'DELETE' });
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ошибка ${response.status}: ${errorText}`);
+            throw new Error(await getApiErrorMessage(response));
         }
         await loadItems();
         await loadBoms();
@@ -220,7 +219,7 @@ window.deleteItem = async function (id) {
             loadWarehouseData();
         }
     } catch (err) {
-        alert('Ошибка при удалении: ' + err.message);
+        showErrorNotification('Ошибка при удалении элемента: ' + err.message);
     }
 };
 
@@ -381,12 +380,11 @@ window.deleteBom = async function (bomId) {
     try {
         const response = await fetch(`${API}/Bom/${bomId}`, { method: 'DELETE' });
         if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ошибка ${response.status}: ${errorText}`);
+            throw new Error(await getApiErrorMessage(response));
         }
         await loadBoms();
     } catch (err) {
-        alert('Ошибка при удалении связи: ' + err.message);
+        showErrorNotification('Ошибка при удалении связи: ' + err.message);
     }
 };
 
@@ -669,6 +667,8 @@ async function loadStock() {
                 <td><strong>${item.itemId}</strong></td>
                 <td>${item.itemName}</td>
                 <td>${Math.floor(item.currentQuantity)}</td>
+                <td>${Math.floor(item.reservedQuantity || 0)}</td>
+                <td>${Math.floor(item.availableQuantity ?? (item.currentQuantity - (item.reservedQuantity || 0)))}</td>
                 <td>${item.purchasePrice.toFixed(2)}</td>
                 <td>${(item.currentQuantity * item.purchasePrice).toFixed(2)}</td>
              </tr>
@@ -861,6 +861,16 @@ async function loadOrdersData() {
     await updateOrderSellableSelect();
 }
 
+function getOrderStatusMeta(status) {
+    const map = {
+        Draft: { text: 'Черновик', className: 'order-draft' },
+        Confirmed: { text: 'Подтвержден', className: 'order-confirmed' },
+        Shipped: { text: 'Отгружен', className: 'order-shipped' },
+        Cancelled: { text: 'Отменен', className: 'order-cancelled' }
+    };
+    return map[status] || { text: status || '—', className: 'order-draft' };
+}
+
 async function loadOrders() {
     try {
         const res = await fetch(`${API}/Order`);
@@ -872,6 +882,7 @@ async function loadOrders() {
 
         tbody.innerHTML = orders.map(order => {
             const orderDate = order.orderDate ? new Date(order.orderDate).toLocaleDateString('ru-RU') : '—';
+            const statusMeta = getOrderStatusMeta(order.status);
             return `
                 <tr>
                     <td>${orderDate}</td>
@@ -879,7 +890,13 @@ async function loadOrders() {
                     <td>${order.quantity}</td>
                     <td>${order.unitPrice.toFixed(2)}</td>
                     <td>${order.totalAmount.toFixed(2)}</td>
+                    <td><span class="badge ${statusMeta.className}">${statusMeta.text}</span></td>
                     <td>${order.comment || '—'}</td>
+                    <td class="actions">
+                        ${order.status === 'Draft' ? `<button class="btn btn-sm btn-secondary" onclick="confirmOrder(${order.orderId})">Подтвердить</button>` : ''}
+                        ${order.status === 'Confirmed' ? `<button class="btn btn-sm btn-primary" onclick="shipOrder(${order.orderId})">Отгрузить</button>` : ''}
+                        ${(order.status === 'Draft' || order.status === 'Confirmed') ? `<button class="btn btn-sm btn-danger" onclick="cancelOrder(${order.orderId})">Отменить</button>` : ''}
+                    </td>
                 </tr>
             `;
         }).join('');
@@ -897,8 +914,13 @@ async function updateOrderSellableSelect() {
         if (!res.ok) throw new Error(`Ошибка загрузки доступных товаров: ${res.status}`);
         const sellableItems = await res.json();
 
+        if (!sellableItems.length) {
+            itemSelect.innerHTML = '<option value="">Нет доступных позиций</option>';
+            return;
+        }
+
         itemSelect.innerHTML = sellableItems.map(item =>
-            `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (остаток: ${Math.floor(item.currentQuantity)})</option>`
+            `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (доступно: ${Math.floor(item.availableQuantity)})</option>`
         ).join('');
     } catch (err) {
         showErrorNotification(err.message);
@@ -910,6 +932,7 @@ function initOrderModal() {
     const openBtn = document.getElementById('add-order-btn');
     const closeBtn = document.getElementById('order-modal-close');
     const cancelBtn = document.getElementById('order-modal-cancel');
+    const mrpBtn = document.getElementById('calc-orders-mrp-btn');
     const form = document.getElementById('order-form');
 
     if (!modal || !form) return;
@@ -926,6 +949,12 @@ function initOrderModal() {
             document.getElementById('order-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('order-comment').value = '';
             modal.classList.add('active');
+        });
+    }
+
+    if (mrpBtn) {
+        mrpBtn.addEventListener('click', async () => {
+            await loadOrdersMrpShortages();
         });
     }
 
@@ -965,3 +994,72 @@ function initOrderModal() {
         }
     });
 }
+
+async function loadOrdersMrpShortages() {
+    const container = document.getElementById('orders-mrp-results');
+    if (!container) return;
+
+    try {
+        const response = await fetch(`${API}/Order/mrp-shortages`);
+        if (!response.ok) throw new Error(await getApiErrorMessage(response));
+        const rows = await response.json();
+
+        if (!rows.length) {
+            container.innerHTML = '<h4>MRP дефицит</h4><p>Дефицитов по активным заказам не найдено.</p>';
+            return;
+        }
+
+        const itemsHtml = rows.map(row => `
+            <div class="result-item">
+                <span>${row.itemName} (ID ${row.itemId})</span>
+                <span>
+                    нужно: <strong>${row.requiredQuantity}</strong>,
+                    доступно: ${row.availableQuantity},
+                    <span class="badge shortage">дефицит: ${row.shortageQuantity}</span>
+                </span>
+            </div>
+        `).join('');
+
+        container.innerHTML = `<h4>MRP дефицит</h4>${itemsHtml}`;
+    } catch (err) {
+        showErrorNotification('Не удалось рассчитать MRP: ' + err.message);
+    }
+}
+
+window.confirmOrder = async function (orderId) {
+    try {
+        const response = await fetch(`${API}/Order/${orderId}/confirm`, { method: 'POST' });
+        if (!response.ok) throw new Error(await getApiErrorMessage(response));
+        await loadItems();
+        await loadWarehouseData();
+        await loadOrdersData();
+    } catch (err) {
+        showErrorNotification('Не удалось подтвердить заказ: ' + err.message);
+    }
+};
+
+window.shipOrder = async function (orderId) {
+    try {
+        const response = await fetch(`${API}/Order/${orderId}/ship`, { method: 'POST' });
+        if (!response.ok) throw new Error(await getApiErrorMessage(response));
+        await loadItems();
+        await loadBoms();
+        await loadWarehouseData();
+        await loadOrdersData();
+    } catch (err) {
+        showErrorNotification('Не удалось отгрузить заказ: ' + err.message);
+    }
+};
+
+window.cancelOrder = async function (orderId) {
+    if (!confirm('Отменить заказ?')) return;
+    try {
+        const response = await fetch(`${API}/Order/${orderId}/cancel`, { method: 'POST' });
+        if (!response.ok) throw new Error(await getApiErrorMessage(response));
+        await loadItems();
+        await loadWarehouseData();
+        await loadOrdersData();
+    } catch (err) {
+        showErrorNotification('Не удалось отменить заказ: ' + err.message);
+    }
+};

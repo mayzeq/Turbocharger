@@ -30,6 +30,8 @@ public class ItemController : ControllerBase
                 ItemId = i.ItemId,
                 ItemName = i.ItemName,
                 CurrentQuantity = i.CurrentQuantity,
+                ReservedQuantity = i.ReservedQuantity,
+                AvailableQuantity = i.CurrentQuantity - i.ReservedQuantity,
                 PurchasePrice = i.PurchasePrice
             })
             .ToListAsync();
@@ -52,6 +54,8 @@ public class ItemController : ControllerBase
                 ItemId = i.ItemId,
                 ItemName = i.ItemName,
                 CurrentQuantity = i.CurrentQuantity,
+                ReservedQuantity = i.ReservedQuantity,
+                AvailableQuantity = i.CurrentQuantity - i.ReservedQuantity,
                 PurchasePrice = i.PurchasePrice
 
             })
@@ -88,6 +92,8 @@ public class ItemController : ControllerBase
             ItemId = item.ItemId,
             ItemName = item.ItemName,
             CurrentQuantity = item.CurrentQuantity,
+            ReservedQuantity = item.ReservedQuantity,
+            AvailableQuantity = item.CurrentQuantity - item.ReservedQuantity,
             PurchasePrice = item.PurchasePrice
         };
 
@@ -120,6 +126,8 @@ public class ItemController : ControllerBase
             ItemId = item.ItemId,
             ItemName = item.ItemName,
             CurrentQuantity = item.CurrentQuantity,
+            ReservedQuantity = item.ReservedQuantity,
+            AvailableQuantity = item.CurrentQuantity - item.ReservedQuantity,
             PurchasePrice = item.PurchasePrice
         });
     }
@@ -136,8 +144,8 @@ public class ItemController : ControllerBase
         if (item == null)
             return NotFound($"Элемент с ID {id} не найден");
 
-        if (item.CurrentQuantity > 0)
-            return BadRequest($"Элемент нельзя удалить: на складе есть остаток ({item.CurrentQuantity}).");
+        if (item.CurrentQuantity > 0 || item.ReservedQuantity > 0)
+            return BadRequest($"Элемент нельзя удалить: есть остаток/резерв. Остаток: {item.CurrentQuantity}, резерв: {item.ReservedQuantity}.");
 
         // Проверяем, используется ли элемент в сборках
         bool isUsed = await _context.BOM.AnyAsync(b => b.ParentId == id || b.ComponentId == id);

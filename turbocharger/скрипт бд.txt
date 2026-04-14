@@ -9,10 +9,11 @@ CREATE TABLE "Item" (
     "ItemId" SERIAL PRIMARY KEY,
     "ItemName" VARCHAR(100) NOT NULL,
     "CurrentQuantity" INT NOT NULL DEFAULT 0,
+    "ReservedQuantity" INT NOT NULL DEFAULT 0,   -- для MRP резервирования
     "PurchasePrice" DECIMAL(18,2) NOT NULL DEFAULT 0
 );
 
--- Таблица BOM
+-- Таблица BOM (структура сборки)
 CREATE TABLE "BOM" (
     "BomId" SERIAL PRIMARY KEY,
     "ParentId" INT REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
@@ -20,7 +21,7 @@ CREATE TABLE "BOM" (
     "Quantity" INT NOT NULL DEFAULT 1 CHECK ("Quantity" > 0)
 );
 
--- Таблица WarehouseOperations
+-- Таблица WarehouseOperations (складские операции)
 CREATE TABLE "WarehouseOperations" (
     "OperationId" SERIAL PRIMARY KEY,
     "ItemId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
@@ -28,20 +29,21 @@ CREATE TABLE "WarehouseOperations" (
     "Quantity" INT NOT NULL,
     "UnitPrice" DECIMAL(18,2) NOT NULL,
     "Comment" VARCHAR(500),
-    "CreatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "OperationDate" DATE NOT NULL
+    "CreatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "OperationDate" TIMESTAMPTZ NOT NULL
 );
 
--- Таблица Orders
+-- Таблица Orders (заказы) – добавлен столбец Status
 CREATE TABLE "Orders" (
     "OrderId" SERIAL PRIMARY KEY,
     "ItemId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
     "Quantity" INT NOT NULL CHECK ("Quantity" > 0),
     "UnitPrice" DECIMAL(18,2) NOT NULL CHECK ("UnitPrice" >= 0),
     "TotalAmount" DECIMAL(18,2) NOT NULL,
+    "Status" VARCHAR(50) NOT NULL DEFAULT 'Подтвержден',   -- статус заказа
     "Comment" VARCHAR(500),
-    "CreatedAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "OrderDate" DATE NOT NULL
+    "CreatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "OrderDate" TIMESTAMPTZ NOT NULL
 );
 
 -- Индексы для производительности
@@ -49,53 +51,43 @@ CREATE INDEX "IX_WarehouseOperations_ItemId" ON "WarehouseOperations" ("ItemId")
 CREATE INDEX "IX_WarehouseOperations_OperationDate" ON "WarehouseOperations" ("OperationDate");
 CREATE INDEX "IX_Orders_ItemId" ON "Orders" ("ItemId");
 CREATE INDEX "IX_Orders_OrderDate" ON "Orders" ("OrderDate");
+CREATE INDEX "IX_Orders_Status" ON "Orders" ("Status");   -- дополнительный индекс по статусу
 CREATE INDEX "IX_BOM_ParentId" ON "BOM" ("ParentId");
 CREATE INDEX "IX_BOM_ComponentId" ON "BOM" ("ComponentId");
 CREATE INDEX "IX_BOM_ParentId_ComponentId" ON "BOM" ("ParentId", "ComponentId");
 
--- Заполнение таблицы Item
-INSERT INTO "Item" ("ItemName", "CurrentQuantity", "PurchasePrice") VALUES
-    ('Турбокомпрессор (000)', 0, 0),        -- 1
-    ('Корпус (001)', 0, 0),                 -- 2
-    ('Ротор (002)', 0, 0),                  -- 3
-    ('Подшипники и уплотнения (003)', 0, 0),-- 4
-    ('Крепеж (004)', 0, 0),                 -- 5
-    ('Корпус турбины (011)', 0, 0),         -- 6
-    ('Корпус компрессора (012)', 0, 0),     -- 7
-    ('Центральный корпус (013)', 0, 0),     -- 8
-    ('Вал (021)', 0, 0),                    -- 9
-    ('Колесо турбины (022)', 0, 0),         -- 10
-    ('Колесо компрессора (023)', 0, 0),     -- 11
-    ('Подшипник (031)', 0, 0),              -- 12
-    ('Уплотнительное кольцо (032)', 0, 0),  -- 13
-    ('Болт (041)', 0, 0),                   -- 14
-    ('Гайка (042)', 0, 0);                  -- 15
+-- Заполнение Item
+INSERT INTO "Item" ("ItemName", "CurrentQuantity", "ReservedQuantity", "PurchasePrice") VALUES
+    ('Турбокомпрессор (000)', 0, 0, 0),
+    ('Корпус (001)', 0, 0, 0),
+    ('Ротор (002)', 0, 0, 0),
+    ('Подшипники и уплотнения (003)', 0, 0, 0),
+    ('Крепеж (004)', 0, 0, 0),
+    ('Корпус турбины (011)', 0, 0, 0),
+    ('Корпус компрессора (012)', 0, 0, 0),
+    ('Центральный корпус (013)', 0, 0, 0),
+    ('Вал (021)', 0, 0, 0),
+    ('Колесо турбины (022)', 0, 0, 0),
+    ('Колесо компрессора (023)', 0, 0, 0),
+    ('Подшипник (031)', 0, 0, 0),
+    ('Уплотнительное кольцо (032)', 0, 0, 0),
+    ('Болт (041)', 0, 0, 0),
+    ('Гайка (042)', 0, 0, 0);
 
--- Заполнение структуры сборки (BOM)
+-- Заполнение BOM
 INSERT INTO "BOM" ("ParentId", "ComponentId", "Quantity") VALUES
-    -- Корневой элемент
     (NULL, 1, 1),
-
-    -- Состав турбокомпрессора
     (1, 2, 1),
     (1, 3, 1),
-    (1, 4, 2),  -- 2 комплекта
+    (1, 4, 2),
     (1, 5, 2),
-
-    -- Состав корпуса
     (2, 6, 1),
     (2, 7, 1),
     (2, 8, 1),
-
-    -- Состав ротора
     (3, 9, 1),
     (3, 10, 1),
     (3, 11, 1),
-
-    -- Состав подшипников и уплотнений
-    (4, 12, 2),  -- 2 шт в комплекте
+    (4, 12, 2),
     (4, 13, 2),
-
-    -- Состав крепежа
     (5, 14, 4),
     (5, 15, 4);

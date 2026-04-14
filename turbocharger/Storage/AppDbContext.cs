@@ -35,6 +35,7 @@ public class AppDbContext : DbContext
             entity.ToTable("Item");  
             entity.HasKey(e => e.ItemId);
             entity.Property(e => e.ItemName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.ReservedQuantity).HasDefaultValue(0);
         });
 
         // Конфигурация для Bom
@@ -78,6 +79,7 @@ public class AppDbContext : DbContext
         {
             entity.ToTable("Orders");
             entity.HasKey(e => e.OrderId);
+            entity.Property(e => e.Status).HasMaxLength(20);
             entity.Property(e => e.Comment).HasMaxLength(500);
             entity.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)");
             entity.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");

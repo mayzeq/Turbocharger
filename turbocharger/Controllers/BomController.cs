@@ -56,7 +56,7 @@ public class BomController : ControllerBase
             .FirstOrDefaultAsync();
 
         if (bom == null)
-            return NotFound($"Связь BOM с ID {id} не найдена");
+            return NotFound($" BOM  ID {id}  ");
 
         return Ok(bom);
     }
@@ -66,7 +66,7 @@ public class BomController : ControllerBase
     {
         var parentExists = await _context.Item.AnyAsync(i => i.ItemId == parentId);
         if (!parentExists)
-            return NotFound($"Родитель с ID {parentId} не найден");
+            return NotFound($"  ID {parentId}  ");
 
         var boms = await _context.BOM
             .Include(b => b.Component)
@@ -88,20 +88,20 @@ public class BomController : ControllerBase
     public async Task<ActionResult<BomResponseDto>> PostBom([FromBody] BomCreateDto dto)
     {
         if (dto.Quantity <= 0)
-            return BadRequest("Количество в структуре должно быть больше 0.");
+            return BadRequest("      0.");
 
         var component = await _context.Item.FindAsync(dto.ComponentId);
         if (component == null)
-            return BadRequest($"Компонент с ID {dto.ComponentId} не существует");
+            return BadRequest($"  ID {dto.ComponentId}  ");
 
         if (dto.ParentId.HasValue)
         {
             var parent = await _context.Item.FindAsync(dto.ParentId.Value);
             if (parent == null)
-                return BadRequest($"Родительский элемент с ID {dto.ParentId.Value} не существует");
+                return BadRequest($"   ID {dto.ParentId.Value}  ");
 
             if (await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-                return BadRequest("Добавление этой связи приведет к циклу");
+                return BadRequest("     ");
         }
 
         var exists = await _context.BOM.AnyAsync(b =>
@@ -109,7 +109,7 @@ public class BomController : ControllerBase
             b.ComponentId == dto.ComponentId);
 
         if (exists)
-            return BadRequest("Такая связь уже существует");
+            return BadRequest("   ");
 
         var bom = new Bom
         {
@@ -141,22 +141,22 @@ public class BomController : ControllerBase
     public async Task<IActionResult> PutBom(int id, [FromBody] BomCreateDto dto)
     {
         if (dto.Quantity <= 0)
-            return BadRequest("Количество в структуре должно быть больше 0.");
+            return BadRequest("      0.");
 
         var bom = await _context.BOM.FindAsync(id);
         if (bom == null)
-            return NotFound($"Связь BOM с ID {id} не найдена");
+            return NotFound($" BOM  ID {id}  ");
 
         if (!await _context.Item.AnyAsync(i => i.ItemId == dto.ComponentId))
-            return BadRequest($"Компонент с ID {dto.ComponentId} не существует");
+            return BadRequest($"  ID {dto.ComponentId}  ");
 
         if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.ItemId == dto.ParentId))
-            return BadRequest($"Родительский элемент с ID {dto.ParentId} не существует");
+            return BadRequest($"   ID {dto.ParentId}  ");
 
         if ((bom.ParentId != dto.ParentId || bom.ComponentId != dto.ComponentId) &&
             dto.ParentId.HasValue &&
             await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-            return BadRequest("Добавление этой связи приведет к циклу");
+            return BadRequest("     ");
 
         bom.ParentId = dto.ParentId;
         bom.ComponentId = dto.ComponentId;
@@ -175,12 +175,14 @@ public class BomController : ControllerBase
             .Include(b => b.Component)
             .FirstOrDefaultAsync(b => b.BomId == id);
         if (bom == null)
-            return NotFound($"Связь BOM с ID {id} не найдена");
+            return NotFound($" BOM  ID {id}  ");
 
         var parentQty = bom.Parent?.CurrentQuantity ?? 0;
+        var parentReserved = bom.Parent?.ReservedQuantity ?? 0;
         var componentQty = bom.Component.CurrentQuantity;
-        if (parentQty > 0 || componentQty > 0)
-            return BadRequest($"Нельзя удалить связь: есть остатки на складе. Родитель: {parentQty}, компонент: {componentQty}.");
+        var componentReserved = bom.Component.ReservedQuantity;
+        if (parentQty > 0 || parentReserved > 0 || componentQty > 0 || componentReserved > 0)
+            return BadRequest($"Нельзя удалить связь: есть остатки/резервы. Родитель: остаток {parentQty}, резерв {parentReserved}; компонент: остаток {componentQty}, резерв {componentReserved}.");
 
         _context.BOM.Remove(bom);
         await _context.SaveChangesAsync();

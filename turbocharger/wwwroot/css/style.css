@@ -667,6 +667,22 @@ body {
     color: #27466f;
 }
 
+.badge.order-draft {
+    background: #64748b;
+}
+
+.badge.order-confirmed {
+    background: #2563eb;
+}
+
+.badge.order-shipped {
+    background: #0f766e;
+}
+
+.badge.order-cancelled {
+    background: #9f1239;
+}
+
 /* ����� ��� ������� �������� */
 .badge.income {
     background: var(--accent);

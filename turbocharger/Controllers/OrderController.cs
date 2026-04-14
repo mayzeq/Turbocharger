@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using Turbocharger.Domain.Entities;
 using Turbocharger.Domain.ValueObjects;
 using Turbocharger.Storage;
@@ -21,18 +22,7 @@ public class OrderController : ControllerBase
             .Include(o => o.Item)
             .OrderByDescending(o => o.OrderDate)
             .ThenByDescending(o => o.OrderId)
-            .Select(o => new OrderDto
-            {
-                OrderId = o.OrderId,
-                ItemId = o.ItemId,
-                ItemName = o.Item.ItemName,
-                Quantity = o.Quantity,
-                UnitPrice = o.UnitPrice,
-                TotalAmount = o.TotalAmount,
-                Comment = o.Comment,
-                CreatedAt = o.CreatedAt,
-                OrderDate = o.OrderDate
-            })
+            .Select(ToDto())
             .ToListAsync();
 
         return Ok(orders);
@@ -48,11 +38,70 @@ public class OrderController : ControllerBase
             {
                 ItemId = i.ItemId,
                 ItemName = i.ItemName,
-                CurrentQuantity = i.CurrentQuantity
+                CurrentQuantity = i.CurrentQuantity,
+                ReservedQuantity = i.ReservedQuantity,
+                AvailableQuantity = i.CurrentQuantity - i.ReservedQuantity
             })
             .ToListAsync();
 
         return Ok(sellableItems);
+    }
+
+    [HttpGet("mrp-shortages")]
+    public async Task<ActionResult<IEnumerable<MrpShortageDto>>> GetMrpShortages()
+    {
+        var activeOrders = await _context.Orders
+            .Where(o => o.Status == "Draft" || o.Status == "Confirmed")
+            .Select(o => new { o.ItemId, o.Quantity })
+            .ToListAsync();
+
+        var bomRows = await _context.BOM
+            .Select(b => new { b.ParentId, b.ComponentId, b.Quantity })
+            .ToListAsync();
+
+        var items = await _context.Item
+            .Select(i => new { i.ItemId, i.ItemName, i.CurrentQuantity, i.ReservedQuantity })
+            .ToListAsync();
+
+        var childrenByParent = bomRows
+            .Where(b => b.ParentId.HasValue)
+            .GroupBy(b => b.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.Select(x => (x.ComponentId, x.Quantity)).ToList());
+
+        var requirements = new Dictionary<int, int>();
+        foreach (var order in activeOrders)
+        {
+            AddLeafRequirements(order.ItemId, order.Quantity, childrenByParent, requirements);
+        }
+
+        var itemMap = items.ToDictionary(i => i.ItemId, i => i);
+        var shortages = requirements
+            .Select(r =>
+            {
+                if (!itemMap.TryGetValue(r.Key, out var item))
+                    return null;
+
+                var available = item.CurrentQuantity - item.ReservedQuantity;
+                var shortage = Math.Max(0, r.Value - available);
+                if (shortage <= 0)
+                    return null;
+
+                return new MrpShortageDto
+                {
+                    ItemId = item.ItemId,
+                    ItemName = item.ItemName,
+                    RequiredQuantity = r.Value,
+                    AvailableQuantity = available,
+                    ShortageQuantity = shortage
+                };
+            })
+            .Where(x => x != null)
+            .OrderByDescending(x => x!.ShortageQuantity)
+            .ThenBy(x => x!.ItemId)
+            .Select(x => x!)
+            .ToList();
+
+        return Ok(shortages);
     }
 
     [HttpPost]
@@ -60,7 +109,6 @@ public class OrderController : ControllerBase
     {
         if (dto.Quantity <= 0)
             return BadRequest("Количество в заказе должно быть больше 0.");
-
         if (dto.UnitPrice < 0)
             return BadRequest("Цена продажи не может быть отрицательной.");
 
@@ -72,62 +120,177 @@ public class OrderController : ControllerBase
         if (!hasChildren)
             return BadRequest("Продажа запрещена: нельзя продавать детали нижнего уровня.");
 
-        if (item.CurrentQuantity < dto.Quantity)
-            return BadRequest($"Недостаточно на складе. Доступно: {item.CurrentQuantity}, требуется: {dto.Quantity}.");
+        var order = new Order
+        {
+            ItemId = dto.ItemId,
+            Quantity = dto.Quantity,
+            UnitPrice = dto.UnitPrice,
+            TotalAmount = dto.Quantity * dto.UnitPrice,
+            Status = "Draft",
+            Comment = dto.Comment,
+            CreatedAt = DateTime.UtcNow,
+            OrderDate = DateTime.SpecifyKind(dto.OrderDate, DateTimeKind.Utc)
+        };
 
-        var orderDateUtc = DateTime.SpecifyKind(dto.OrderDate, DateTimeKind.Utc);
+        _context.Orders.Add(order);
+        await _context.SaveChangesAsync();
+        await _context.Entry(order).Reference(o => o.Item).LoadAsync();
 
-        await using var transaction = await _context.Database.BeginTransactionAsync();
+        return Ok(new OrderDto
+        {
+            OrderId = order.OrderId,
+            ItemId = order.ItemId,
+            ItemName = order.Item.ItemName,
+            Quantity = order.Quantity,
+            UnitPrice = order.UnitPrice,
+            TotalAmount = order.TotalAmount,
+            Status = order.Status,
+            Comment = order.Comment,
+            CreatedAt = order.CreatedAt,
+            OrderDate = order.OrderDate
+        });
+    }
+
+    [HttpPost("{orderId}/confirm")]
+    public async Task<ActionResult<OrderDto>> ConfirmOrder(int orderId)
+    {
+        var order = await _context.Orders.Include(o => o.Item).FirstOrDefaultAsync(o => o.OrderId == orderId);
+        if (order == null)
+            return NotFound("Заказ не найден.");
+        if (order.Status != "Draft")
+            return BadRequest("Подтверждать можно только заказ в статусе Черновик.");
+
+        var available = order.Item.CurrentQuantity - order.Item.ReservedQuantity;
+        if (available < order.Quantity)
+            return BadRequest($"Недостаточно доступного остатка. Доступно: {available}, требуется: {order.Quantity}.");
+
+        order.Item.ReservedQuantity += order.Quantity;
+        order.Status = "Confirmed";
+        await _context.SaveChangesAsync();
+
+        return Ok(MapOrder(order));
+    }
+
+    [HttpPost("{orderId}/ship")]
+    public async Task<ActionResult<OrderDto>> ShipOrder(int orderId)
+    {
+        var order = await _context.Orders.Include(o => o.Item).FirstOrDefaultAsync(o => o.OrderId == orderId);
+        if (order == null)
+            return NotFound("Заказ не найден.");
+        if (order.Status != "Confirmed")
+            return BadRequest("Отгружать можно только подтвержденный заказ.");
+
+        if (order.Item.ReservedQuantity < order.Quantity || order.Item.CurrentQuantity < order.Quantity)
+            return BadRequest("Неконсистентные остатки/резервы. Проверьте складские данные.");
+
+        await using var tx = await _context.Database.BeginTransactionAsync();
         try
         {
-            var order = new Order
-            {
-                ItemId = dto.ItemId,
-                Quantity = dto.Quantity,
-                UnitPrice = dto.UnitPrice,
-                TotalAmount = dto.Quantity * dto.UnitPrice,
-                Comment = dto.Comment,
-                CreatedAt = DateTime.UtcNow,
-                OrderDate = orderDateUtc
-            };
-
-            _context.Orders.Add(order);
-
-            item.CurrentQuantity -= dto.Quantity;
+            order.Item.ReservedQuantity -= order.Quantity;
+            order.Item.CurrentQuantity -= order.Quantity;
+            order.Status = "Shipped";
 
             _context.WarehouseOperations.Add(new WarehouseOperation
             {
-                ItemId = dto.ItemId,
+                ItemId = order.ItemId,
                 OperationType = "Expense",
-                Quantity = dto.Quantity,
-                UnitPrice = dto.UnitPrice,
-                Comment = string.IsNullOrWhiteSpace(dto.Comment)
-                    ? "Продажа по заказу"
-                    : $"Продажа по заказу. {dto.Comment}",
+                Quantity = order.Quantity,
+                UnitPrice = order.UnitPrice,
+                Comment = string.IsNullOrWhiteSpace(order.Comment)
+                    ? $"Отгрузка по заказу #{order.OrderId}"
+                    : $"Отгрузка по заказу #{order.OrderId}. {order.Comment}",
                 CreatedAt = DateTime.UtcNow,
-                OperationDate = orderDateUtc
+                OperationDate = order.OrderDate
             });
 
             await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
-
-            return Ok(new OrderDto
-            {
-                OrderId = order.OrderId,
-                ItemId = item.ItemId,
-                ItemName = item.ItemName,
-                Quantity = order.Quantity,
-                UnitPrice = order.UnitPrice,
-                TotalAmount = order.TotalAmount,
-                Comment = order.Comment,
-                CreatedAt = order.CreatedAt,
-                OrderDate = order.OrderDate
-            });
+            await tx.CommitAsync();
         }
         catch
         {
-            await transaction.RollbackAsync();
+            await tx.RollbackAsync();
             throw;
+        }
+
+        return Ok(MapOrder(order));
+    }
+
+    [HttpPost("{orderId}/cancel")]
+    public async Task<ActionResult<OrderDto>> CancelOrder(int orderId)
+    {
+        var order = await _context.Orders.Include(o => o.Item).FirstOrDefaultAsync(o => o.OrderId == orderId);
+        if (order == null)
+            return NotFound("Заказ не найден.");
+        if (order.Status == "Shipped")
+            return BadRequest("Отгруженный заказ нельзя отменить.");
+        if (order.Status == "Cancelled")
+            return BadRequest("Заказ уже отменен.");
+
+        if (order.Status == "Confirmed")
+        {
+            if (order.Item.ReservedQuantity < order.Quantity)
+                return BadRequest("Неконсистентные резервы. Невозможно отменить заказ.");
+
+            order.Item.ReservedQuantity -= order.Quantity;
+        }
+
+        order.Status = "Cancelled";
+        await _context.SaveChangesAsync();
+
+        return Ok(MapOrder(order));
+    }
+
+    private static Expression<Func<Order, OrderDto>> ToDto()
+    {
+        return o => new OrderDto
+        {
+            OrderId = o.OrderId,
+            ItemId = o.ItemId,
+            ItemName = o.Item.ItemName,
+            Quantity = o.Quantity,
+            UnitPrice = o.UnitPrice,
+            TotalAmount = o.TotalAmount,
+            Status = o.Status,
+            Comment = o.Comment,
+            CreatedAt = o.CreatedAt,
+            OrderDate = o.OrderDate
+        };
+    }
+
+    private static OrderDto MapOrder(Order order)
+    {
+        return new OrderDto
+        {
+            OrderId = order.OrderId,
+            ItemId = order.ItemId,
+            ItemName = order.Item.ItemName,
+            Quantity = order.Quantity,
+            UnitPrice = order.UnitPrice,
+            TotalAmount = order.TotalAmount,
+            Status = order.Status,
+            Comment = order.Comment,
+            CreatedAt = order.CreatedAt,
+            OrderDate = order.OrderDate
+        };
+    }
+
+    private static void AddLeafRequirements(
+        int itemId,
+        int multiplier,
+        IReadOnlyDictionary<int, List<(int ComponentId, int Quantity)>> childrenByParent,
+        IDictionary<int, int> requirements)
+    {
+        if (!childrenByParent.TryGetValue(itemId, out var children) || children.Count == 0)
+        {
+            requirements[itemId] = requirements.TryGetValue(itemId, out var current)
+                ? current + multiplier
+                : multiplier;
+            return;
+        }
+
+        foreach (var child in children)
+        {
+            AddLeafRequirements(child.ComponentId, multiplier * child.Quantity, childrenByParent, requirements);
         }
     }
 }

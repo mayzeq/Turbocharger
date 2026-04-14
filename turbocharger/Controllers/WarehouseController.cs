@@ -307,6 +307,8 @@ public class WarehouseController : ControllerBase
                 itemId = i.ItemId,
                 itemName = i.ItemName,
                 currentQuantity = i.CurrentQuantity,
+                reservedQuantity = i.ReservedQuantity,
+                availableQuantity = i.CurrentQuantity - i.ReservedQuantity,
                 purchasePrice = i.PurchasePrice,
                 totalValue = i.CurrentQuantity * i.PurchasePrice
             })
