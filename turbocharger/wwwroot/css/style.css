@@ -1,17 +1,17 @@
 ﻿/* Ҹ���� ���� � ����������� ��������� */
 :root {
-    --bg-primary: #f3f5f8;
-    --bg-secondary: #e9edf2;
-    --bg-tertiary: #dce3ec;
+    --bg-primary: #fff7ed;
+    --bg-secondary: #ffedd5;
+    --bg-tertiary: #fed7aa;
     --text-primary: #1f2937;
     --text-secondary: #4b5563;
     --text-on-dark: #ffffff;
-    --accent: #1e88ff;
-    --accent-hover: #0f6fd6;
-    --accent-light: rgba(30, 136, 255, 0.15);
-    --border: #c9d4e3;
-    --nav-bg: #1f2a44;
-    --nav-bg-alt: #2b354d;
+    --accent: #ea580c;
+    --accent-hover: #c2410c;
+    --accent-light: rgba(234, 88, 12, 0.2);
+    --border: #fdba74;
+    --nav-bg: #9a3412;
+    --nav-bg-alt: #c2410c;
     --success: #10b981;
     --danger: #ef4444;
     --warning: #f59e0b;
@@ -30,12 +30,15 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     line-height: 1.5;
+    display: flex;
+    justify-content: center;
 }
 
 .app {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    width: min(1400px, 100%);
 }
 
 /* ������� */
@@ -154,10 +157,7 @@ body {
     .view-header h2 {
         font-size: 1.75rem;
         font-weight: 600;
-        background: linear-gradient(135deg, var(--text-primary), var(--accent));
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
+        color: var(--text-primary);
     }
 
 .btn {
@@ -244,6 +244,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     background: #ffffff;
+    table-layout: fixed;
 }
 
     .data-table th,
@@ -251,6 +252,8 @@ body {
         padding: 0.75rem 1rem;
         text-align: left;
         border-bottom: 1px solid var(--border);
+        vertical-align: top;
+        word-wrap: break-word;
     }
 
     .data-table th {
@@ -271,8 +274,15 @@ body {
     }
 
 .actions {
-    display: flex;
-    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.actions .btn {
+    margin-right: 0.4rem;
+}
+
+.actions .btn:last-child {
+    margin-right: 0;
 }
 
 /* BOM controls */
@@ -346,7 +356,6 @@ body {
 }
 
     .tree-item:hover {
-        transform: translateX(4px);
         box-shadow: var(--shadow);
         border-left-color: var(--accent);
     }
@@ -430,7 +439,6 @@ body {
 
     .hierarchy-node:hover {
         background: var(--bg-tertiary);
-        transform: translateX(4px);
         border-left: 3px solid var(--accent);
     }
 

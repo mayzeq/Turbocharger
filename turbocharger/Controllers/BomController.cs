@@ -177,12 +177,10 @@ public class BomController : ControllerBase
         if (bom == null)
             return NotFound($" BOM  ID {id}  ");
 
-        var parentQty = bom.Parent?.CurrentQuantity ?? 0;
-        var parentReserved = bom.Parent?.ReservedQuantity ?? 0;
-        var componentQty = bom.Component.CurrentQuantity;
-        var componentReserved = bom.Component.ReservedQuantity;
-        if (parentQty > 0 || parentReserved > 0 || componentQty > 0 || componentReserved > 0)
-            return BadRequest($"Нельзя удалить связь: есть остатки/резервы. Родитель: остаток {parentQty}, резерв {parentReserved}; компонент: остаток {componentQty}, резерв {componentReserved}.");
+        var parentUsedInOrder = bom.ParentId.HasValue && await _context.OrderLines.AnyAsync(l => l.ItemId == bom.ParentId.Value);
+        var componentUsedInOrder = await _context.OrderLines.AnyAsync(l => l.ItemId == bom.ComponentId);
+        if (parentUsedInOrder || componentUsedInOrder)
+            return BadRequest("????? ?????? ???????: ???? ?? ????????? ??? ???????????? ? ???????.");
 
         _context.BOM.Remove(bom);
         await _context.SaveChangesAsync();

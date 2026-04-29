@@ -1,80 +1,80 @@
--- Удаляем старые таблицы (если существуют) в правильном порядке
-DROP TABLE IF EXISTS "WarehouseOperations" CASCADE;
+-- Полный скрипт БД (PostgreSQL) под текущую модель Turbocharger.
+-- ВНИМАНИЕ: скрипт удаляет существующие таблицы и данные.
+
+BEGIN;
+
+DROP TABLE IF EXISTS "OrderLines" CASCADE;
 DROP TABLE IF EXISTS "Orders" CASCADE;
+DROP TABLE IF EXISTS "WarehouseOperations" CASCADE;
 DROP TABLE IF EXISTS "BOM" CASCADE;
 DROP TABLE IF EXISTS "Item" CASCADE;
 
--- Таблица Item
 CREATE TABLE "Item" (
     "ItemId" SERIAL PRIMARY KEY,
-    "ItemName" VARCHAR(100) NOT NULL,
-    "CurrentQuantity" INT NOT NULL DEFAULT 0,
-    "ReservedQuantity" INT NOT NULL DEFAULT 0,   -- для MRP резервирования
-    "PurchasePrice" DECIMAL(18,2) NOT NULL DEFAULT 0
+    "ItemName" VARCHAR(100) NOT NULL
 );
 
--- Таблица BOM (структура сборки)
 CREATE TABLE "BOM" (
     "BomId" SERIAL PRIMARY KEY,
-    "ParentId" INT REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
-    "ComponentId" INT REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
+    "ParentId" INT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
+    "ComponentId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
     "Quantity" INT NOT NULL DEFAULT 1 CHECK ("Quantity" > 0)
 );
 
--- Таблица WarehouseOperations (складские операции)
 CREATE TABLE "WarehouseOperations" (
     "OperationId" SERIAL PRIMARY KEY,
     "ItemId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
-    "OperationType" VARCHAR(20) NOT NULL,
-    "Quantity" INT NOT NULL,
-    "UnitPrice" DECIMAL(18,2) NOT NULL,
-    "Comment" VARCHAR(500),
+    "OperationType" VARCHAR(20) NOT NULL CHECK ("OperationType" IN ('Income', 'Expense')),
+    "Quantity" INT NOT NULL CHECK ("Quantity" > 0),
+    "Comment" VARCHAR(500) NULL,
     "CreatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "OperationDate" TIMESTAMPTZ NOT NULL
 );
 
--- Таблица Orders (заказы) – добавлен столбец Status
 CREATE TABLE "Orders" (
     "OrderId" SERIAL PRIMARY KEY,
-    "ItemId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
-    "Quantity" INT NOT NULL CHECK ("Quantity" > 0),
-    "UnitPrice" DECIMAL(18,2) NOT NULL CHECK ("UnitPrice" >= 0),
-    "TotalAmount" DECIMAL(18,2) NOT NULL,
-    "Status" VARCHAR(50) NOT NULL DEFAULT 'Подтвержден',   -- статус заказа
-    "Comment" VARCHAR(500),
+    "Status" VARCHAR(20) NOT NULL DEFAULT 'Draft',
+    "Comment" VARCHAR(500) NULL,
     "CreatedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "OrderDate" TIMESTAMPTZ NOT NULL
+    "OrderDate" TIMESTAMPTZ NOT NULL,
+    "DueDate" TIMESTAMPTZ NOT NULL
 );
 
--- Индексы для производительности
-CREATE INDEX "IX_WarehouseOperations_ItemId" ON "WarehouseOperations" ("ItemId");
-CREATE INDEX "IX_WarehouseOperations_OperationDate" ON "WarehouseOperations" ("OperationDate");
-CREATE INDEX "IX_Orders_ItemId" ON "Orders" ("ItemId");
-CREATE INDEX "IX_Orders_OrderDate" ON "Orders" ("OrderDate");
-CREATE INDEX "IX_Orders_Status" ON "Orders" ("Status");   -- дополнительный индекс по статусу
+CREATE TABLE "OrderLines" (
+    "OrderLineId" SERIAL PRIMARY KEY,
+    "OrderId" INT NOT NULL REFERENCES "Orders"("OrderId") ON DELETE CASCADE,
+    "ItemId" INT NOT NULL REFERENCES "Item"("ItemId") ON DELETE RESTRICT,
+    "Quantity" INT NOT NULL CHECK ("Quantity" > 0)
+);
+
 CREATE INDEX "IX_BOM_ParentId" ON "BOM" ("ParentId");
 CREATE INDEX "IX_BOM_ComponentId" ON "BOM" ("ComponentId");
 CREATE INDEX "IX_BOM_ParentId_ComponentId" ON "BOM" ("ParentId", "ComponentId");
+CREATE INDEX "IX_WarehouseOperations_ItemId" ON "WarehouseOperations" ("ItemId");
+CREATE INDEX "IX_WarehouseOperations_OperationDate" ON "WarehouseOperations" ("OperationDate");
+CREATE INDEX "IX_Orders_OrderDate" ON "Orders" ("OrderDate");
+CREATE INDEX "IX_Orders_DueDate" ON "Orders" ("DueDate");
+CREATE INDEX "IX_Orders_Status" ON "Orders" ("Status");
+CREATE INDEX "IX_OrderLines_OrderId" ON "OrderLines" ("OrderId");
+CREATE INDEX "IX_OrderLines_ItemId" ON "OrderLines" ("ItemId");
 
--- Заполнение Item
-INSERT INTO "Item" ("ItemName", "CurrentQuantity", "ReservedQuantity", "PurchasePrice") VALUES
-    ('Турбокомпрессор (000)', 0, 0, 0),
-    ('Корпус (001)', 0, 0, 0),
-    ('Ротор (002)', 0, 0, 0),
-    ('Подшипники и уплотнения (003)', 0, 0, 0),
-    ('Крепеж (004)', 0, 0, 0),
-    ('Корпус турбины (011)', 0, 0, 0),
-    ('Корпус компрессора (012)', 0, 0, 0),
-    ('Центральный корпус (013)', 0, 0, 0),
-    ('Вал (021)', 0, 0, 0),
-    ('Колесо турбины (022)', 0, 0, 0),
-    ('Колесо компрессора (023)', 0, 0, 0),
-    ('Подшипник (031)', 0, 0, 0),
-    ('Уплотнительное кольцо (032)', 0, 0, 0),
-    ('Болт (041)', 0, 0, 0),
-    ('Гайка (042)', 0, 0, 0);
+INSERT INTO "Item" ("ItemName") VALUES
+    ('Турбокомпрессор (000)'),
+    ('Корпус (001)'),
+    ('Ротор (002)'),
+    ('Подшипники и уплотнения (003)'),
+    ('Крепеж (004)'),
+    ('Корпус турбины (011)'),
+    ('Корпус компрессора (012)'),
+    ('Центральный корпус (013)'),
+    ('Вал (021)'),
+    ('Колесо турбины (022)'),
+    ('Колесо компрессора (023)'),
+    ('Подшипник (031)'),
+    ('Уплотнительное кольцо (032)'),
+    ('Болт (041)'),
+    ('Гайка (042)');
 
--- Заполнение BOM
 INSERT INTO "BOM" ("ParentId", "ComponentId", "Quantity") VALUES
     (NULL, 1, 1),
     (1, 2, 1),
@@ -91,3 +91,5 @@ INSERT INTO "BOM" ("ParentId", "ComponentId", "Quantity") VALUES
     (4, 13, 2),
     (5, 14, 4),
     (5, 15, 4);
+
+COMMIT;

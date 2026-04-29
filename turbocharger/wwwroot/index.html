@@ -16,7 +16,6 @@
                 <button class="menu-item active" data-view="items"> Номенклатура</button>
                 <button class="menu-item" data-view="bom"> Структура сборки</button>
                 <button class="menu-item" data-view="hierarchy"> Дерево иерархии</button>
-                <button class="menu-item" data-view="calculator"> Расчёт потребности</button>
                 <button class="menu-item" data-view="warehouse"> Склад</button>
                 <button class="menu-item" data-view="orders"> Заказы</button>
             </nav>
@@ -38,9 +37,6 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Наименование</th>
-                                <th>Остаток</th>
-                                <th>Цена</th>
-                                <th>Стоимость на складе</th>
                                 <th>Действия</th>
                             </tr>
                         </thead>
@@ -78,27 +74,6 @@
                 </div>
             </div>
 
-            <!-- Вкладка Расчёт потребности -->
-            <div id="calculator-view" class="view">
-                <div class="view-header">
-                    <h2>Расчёт потребности материалов</h2>
-                </div>
-                <div class="calculator">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="calc-item-select">Изделие:</label>
-                            <select id="calc-item-select"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="calc-quantity">Количество:</label>
-                            <input type="number" id="calc-quantity" value="1" min="1">
-                        </div>
-                    </div>
-                    <button class="btn btn-primary" id="calc-btn">Рассчитать</button>
-                    <div class="results" id="calc-results"></div>
-                </div>
-            </div>
-
             <!-- Вкладка Склад -->
             <div id="warehouse-view" class="view">
                 <div class="view-header">
@@ -117,8 +92,6 @@
                                         <th>Остаток</th>
                                         <th>Резерв</th>
                                         <th>Доступно</th>
-                                        <th>Цена</th>
-                                        <th>Общая стоимость</th>
                                     </tr>
                                 </thead>
                                 <tbody id="stock-table"></tbody>
@@ -135,7 +108,6 @@
                                         <th>Элемент</th>
                                         <th>Тип</th>
                                         <th>Количество</th>
-                                        <th>Цена</th>
                                         <th>Комментарий</th>
                                         <th>Действия</th>
                                     </tr>
@@ -164,10 +136,8 @@
                         <thead>
                             <tr>
                                 <th>Дата заказа</th>
-                                <th>Элемент</th>
-                                <th>Количество</th>
-                                <th>Цена продажи</th>
-                                <th>Сумма</th>
+                                <th>Срок</th>
+                                <th>Позиции</th>
                                 <th>Статус</th>
                                 <th>Комментарий</th>
                                 <th>Действия</th>
@@ -194,10 +164,6 @@
                 <div class="form-group">
                     <label for="item-name">Наименование</label>
                     <input type="text" id="item-name" required>
-                </div>
-                <div class="form-group">
-                    <label for="item-price">Цена за единицу</label>
-                    <input type="number" id="item-price" step="0.01" min="0" value="0">
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Сохранить</button>
@@ -262,12 +228,8 @@
                     <input type="number" id="op-quantity" min="1" required>
                 </div>
                 <div class="form-group">
-                    <label for="op-price">Цена за единицу:</label>
-                    <input type="number" id="op-price" step="0.01" min="0" required>
-                </div>
-                <div class="form-group">
                     <label for="op-date">Дата операции:</label>
-                    <input type="date" id="op-date" required>
+                    <input type="datetime-local" id="op-date" required>
                 </div>
                 <div class="form-group">
                     <label for="op-comment">Комментарий:</label>
@@ -292,19 +254,21 @@
             <form id="order-form">
                 <div class="form-group">
                     <label for="order-item">Товар для продажи:</label>
-                    <select id="order-item" required></select>
+                    <select id="order-item"></select>
                 </div>
                 <div class="form-group">
                     <label for="order-quantity">Количество:</label>
-                    <input type="number" id="order-quantity" min="1" required>
-                </div>
-                <div class="form-group">
-                    <label for="order-price">Цена продажи за единицу:</label>
-                    <input type="number" id="order-price" step="0.01" min="0" required>
+                    <input type="number" id="order-quantity" min="1">
+                    <button type="button" class="btn btn-secondary" id="add-order-line-btn" style="margin-top:8px;">Добавить позицию</button>
+                    <div id="order-lines" style="margin-top:8px;"></div>
                 </div>
                 <div class="form-group">
                     <label for="order-date">Дата заказа:</label>
-                    <input type="date" id="order-date" required>
+                    <input type="datetime-local" id="order-date" required>
+                </div>
+                <div class="form-group">
+                    <label for="order-due-date">Срок исполнения:</label>
+                    <input type="datetime-local" id="order-due-date" required>
                 </div>
                 <div class="form-group">
                     <label for="order-comment">Комментарий:</label>

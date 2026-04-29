@@ -5,6 +5,16 @@ const API = '/api';
 let items = [];
 let boms = [];
 let currentRootId = null; // для структуры
+let orderLinesDraft = [];
+
+function toDateTimeLocalValue(date = new Date()) {
+    const offsetMs = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function formatDateTime(value) {
+    return value ? new Date(value).toLocaleString('ru-RU') : '—';
+}
 
 function ensureNotificationContainer() {
     let container = document.getElementById('app-notifications');
@@ -95,12 +105,6 @@ async function loadItems() {
         if (!res.ok) throw new Error(`Ошибка загрузки элементов: ${res.status}`);
         items = await res.json();
 
-        // Пересчитываем стоимость для каждого элемента
-        items = items.map(item => ({
-            ...item,
-            calculatedCost: item.currentQuantity * item.purchasePrice
-        }));
-
         items.sort((a, b) => a.itemId - b.itemId);
         renderItems(items);
 
@@ -129,9 +133,6 @@ function renderItems(itemsArray) {
         <tr>
             <td><strong>${item.itemId}</strong>${item.componentId || ''}</td>
             <td>${item.itemName}</td>
-            <td>${Math.floor(item.currentQuantity)}</td>
-            <td>${item.purchasePrice.toFixed(2)}</td>
-            <td>${(item.currentQuantity * item.purchasePrice).toFixed(2)}</td>
             <td class="actions">
                 <button class="btn btn-sm btn-secondary" onclick="editItem(${item.itemId})">Изменить</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteItem(${item.itemId})">Удалить</button>
@@ -152,7 +153,6 @@ function initItemModal() {
             document.getElementById('item-modal-title').textContent = 'Добавить элемент';
             document.getElementById('item-id').value = '';
             document.getElementById('item-name').value = '';
-            document.getElementById('item-price').value = '';
             modal.classList.add('active');
         });
     }
@@ -166,8 +166,7 @@ function initItemModal() {
             e.preventDefault();
             const id = document.getElementById('item-id').value;
             const data = {
-                itemName: document.getElementById('item-name').value,
-                purchasePrice: parseFloat(document.getElementById('item-price').value) || 0
+                itemName: document.getElementById('item-name').value
             };
 
             const url = id ? `${API}/Item/${id}` : `${API}/Item`;
@@ -200,7 +199,6 @@ window.editItem = async function (id) {
     document.getElementById('item-modal-title').textContent = 'Редактировать элемент';
     document.getElementById('item-id').value = item.itemId;
     document.getElementById('item-name').value = item.itemName;
-    document.getElementById('item-price').value = item.purchasePrice;
     document.getElementById('item-modal').classList.add('active');
 };
 
@@ -371,7 +369,6 @@ window.editItemFromBom = async function (itemId) {
     document.getElementById('item-modal-title').textContent = 'Редактировать элемент';
     document.getElementById('item-id').value = item.itemId;
     document.getElementById('item-name').value = item.itemName;
-    document.getElementById('item-price').value = item.purchasePrice;
     document.getElementById('item-modal').classList.add('active');
 };
 
@@ -651,26 +648,18 @@ async function loadStock() {
         if (!res.ok) throw new Error(`Ошибка загрузки остатков: ${res.status}`);
         const stock = await res.json();
 
-        // Пересчитываем общую стоимость для каждого элемента
-        const stockWithTotal = stock.map(item => ({
-            ...item,
-            totalValue: item.currentQuantity * item.purchasePrice
-        }));
-
-        stockWithTotal.sort((a, b) => a.itemId - b.itemId);
+        stock.sort((a, b) => a.itemId - b.itemId);
 
         const tbody = document.getElementById('stock-table');
         if (!tbody) return;
 
-        tbody.innerHTML = stockWithTotal.map(item => `
+        tbody.innerHTML = stock.map(item => `
              <tr>
                 <td><strong>${item.itemId}</strong></td>
                 <td>${item.itemName}</td>
                 <td>${Math.floor(item.currentQuantity)}</td>
                 <td>${Math.floor(item.reservedQuantity || 0)}</td>
                 <td>${Math.floor(item.availableQuantity ?? (item.currentQuantity - (item.reservedQuantity || 0)))}</td>
-                <td>${item.purchasePrice.toFixed(2)}</td>
-                <td>${(item.currentQuantity * item.purchasePrice).toFixed(2)}</td>
              </tr>
         `).join('');
     } catch (err) {
@@ -694,7 +683,7 @@ async function loadOperations() {
             };
             const typeClass = op.operationType === 'Income' ? 'income' : 'expense';
             const sign = op.operationType === 'Income' ? '+' : '-';
-            const opDate = op.operationDate ? new Date(op.operationDate).toLocaleDateString('ru-RU') : '—';
+            const opDate = formatDateTime(op.operationDate);
 
             return `
                  <tr>
@@ -702,7 +691,6 @@ async function loadOperations() {
                     <td>${op.itemName} (ID ${op.itemId})</td>
                     <td><span class="badge ${typeClass}">${typeNames[op.operationType]}</span></td>
                     <td>${sign}${op.quantity}</td>
-                    <td>${op.unitPrice.toFixed(2)}</td>
                     <td>${op.comment || '—'}</td>
                     <td class="actions">
                         <button class="btn btn-sm btn-secondary" onclick="editOperation(${op.operationId})">Изменить</button>
@@ -728,8 +716,7 @@ function initOperationModal() {
             document.getElementById('operation-modal-title').textContent = 'Новая операция';
             document.getElementById('op-type').value = 'Income';
             document.getElementById('op-quantity').value = '';
-            document.getElementById('op-price').value = '';
-            document.getElementById('op-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('op-date').value = toDateTimeLocalValue();
             document.getElementById('op-comment').value = '';
 
             const sortedItems = [...items].sort((a, b) => a.itemId - b.itemId);
@@ -756,7 +743,6 @@ function initOperationModal() {
                 ItemId: parseInt(document.getElementById('op-item').value),
                 OperationType: document.getElementById('op-type').value,
                 Quantity: parseInt(document.getElementById('op-quantity').value),
-                UnitPrice: parseFloat(document.getElementById('op-price').value),
                 Comment: document.getElementById('op-comment').value,
                 OperationDate: document.getElementById('op-date').value
             };
@@ -816,8 +802,7 @@ window.editOperation = async function (id) {
         document.getElementById('op-item').value = op.itemId;
         document.getElementById('op-type').value = op.operationType;
         document.getElementById('op-quantity').value = op.quantity;
-        document.getElementById('op-price').value = op.unitPrice;
-        document.getElementById('op-date').value = op.operationDate ? new Date(op.operationDate).toISOString().split('T')[0] : '';
+        document.getElementById('op-date').value = op.operationDate ? toDateTimeLocalValue(new Date(op.operationDate)) : '';
         document.getElementById('op-comment').value = op.comment || '';
 
         // Сохраняем ID операции для обновления
@@ -881,15 +866,17 @@ async function loadOrders() {
         if (!tbody) return;
 
         tbody.innerHTML = orders.map(order => {
-            const orderDate = order.orderDate ? new Date(order.orderDate).toLocaleDateString('ru-RU') : '—';
+            const orderDate = formatDateTime(order.orderDate);
+            const dueDate = formatDateTime(order.dueDate);
             const statusMeta = getOrderStatusMeta(order.status);
+            const linesText = (order.lines || [])
+                .map(l => `${l.itemName} (ID ${l.itemId}) × ${l.quantity}`)
+                .join('<br>');
             return `
                 <tr>
                     <td>${orderDate}</td>
-                    <td>${order.itemName} (ID ${order.itemId})</td>
-                    <td>${order.quantity}</td>
-                    <td>${order.unitPrice.toFixed(2)}</td>
-                    <td>${order.totalAmount.toFixed(2)}</td>
+                    <td>${dueDate}</td>
+                    <td>${linesText || '—'}</td>
                     <td><span class="badge ${statusMeta.className}">${statusMeta.text}</span></td>
                     <td>${order.comment || '—'}</td>
                     <td class="actions">
@@ -933,6 +920,7 @@ function initOrderModal() {
     const closeBtn = document.getElementById('order-modal-close');
     const cancelBtn = document.getElementById('order-modal-cancel');
     const mrpBtn = document.getElementById('calc-orders-mrp-btn');
+    const addLineBtn = document.getElementById('add-order-line-btn');
     const form = document.getElementById('order-form');
 
     if (!modal || !form) return;
@@ -944,11 +932,35 @@ function initOrderModal() {
     if (openBtn) {
         openBtn.addEventListener('click', async () => {
             await updateOrderSellableSelect();
+            orderLinesDraft = [];
+            renderOrderLinesDraft();
             document.getElementById('order-quantity').value = '';
-            document.getElementById('order-price').value = '';
-            document.getElementById('order-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('order-date').value = toDateTimeLocalValue();
+            document.getElementById('order-due-date').value = toDateTimeLocalValue(new Date(Date.now() + 24 * 60 * 60 * 1000));
             document.getElementById('order-comment').value = '';
             modal.classList.add('active');
+        });
+    }
+
+    if (addLineBtn) {
+        addLineBtn.addEventListener('click', () => {
+            const itemId = parseInt(document.getElementById('order-item').value);
+            const quantity = parseInt(document.getElementById('order-quantity').value);
+            if (!itemId || !quantity || quantity <= 0) {
+                showErrorNotification('Выберите элемент и введите корректное количество.');
+                return;
+            }
+
+            const existing = orderLinesDraft.find(l => l.itemId === itemId);
+            if (existing) {
+                existing.quantity += quantity;
+            } else {
+                const selected = items.find(i => i.itemId === itemId);
+                orderLinesDraft.push({ itemId, itemName: selected?.itemName || `ID ${itemId}`, quantity });
+            }
+
+            document.getElementById('order-quantity').value = '';
+            renderOrderLinesDraft();
         });
     }
 
@@ -961,12 +973,16 @@ function initOrderModal() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
+        if (!orderLinesDraft.length) {
+            showErrorNotification('Добавьте хотя бы одну позицию в заказ.');
+            return;
+        }
+
         const data = {
-            ItemId: parseInt(document.getElementById('order-item').value),
-            Quantity: parseInt(document.getElementById('order-quantity').value),
-            UnitPrice: parseFloat(document.getElementById('order-price').value),
+            Lines: orderLinesDraft.map(l => ({ ItemId: l.itemId, Quantity: l.quantity })),
             Comment: document.getElementById('order-comment').value,
-            OrderDate: document.getElementById('order-date').value
+            OrderDate: document.getElementById('order-date').value,
+            DueDate: document.getElementById('order-due-date').value
         };
 
         try {
@@ -994,6 +1010,30 @@ function initOrderModal() {
         }
     });
 }
+
+function renderOrderLinesDraft() {
+    const container = document.getElementById('order-lines');
+    if (!container) return;
+    if (!orderLinesDraft.length) {
+        container.innerHTML = '<div class="placeholder" style="padding:8px;">Позиции не добавлены</div>';
+        return;
+    }
+
+    container.innerHTML = orderLinesDraft.map((line, index) => `
+        <div class="result-item">
+            <span>${line.itemName} (ID ${line.itemId})</span>
+            <span>
+                <strong>${line.quantity}</strong>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeOrderLineDraft(${index})">Удалить</button>
+            </span>
+        </div>
+    `).join('');
+}
+
+window.removeOrderLineDraft = function (index) {
+    orderLinesDraft.splice(index, 1);
+    renderOrderLinesDraft();
+};
 
 async function loadOrdersMrpShortages() {
     const container = document.getElementById('orders-mrp-results');

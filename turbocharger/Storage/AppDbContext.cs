@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Bom> BOM { get; set; }
     public DbSet<WarehouseOperation> WarehouseOperations { get; set; }
     public DbSet<Order> Orders { get; set; }
+    public DbSet<OrderLine> OrderLines { get; set; }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -35,7 +36,6 @@ public class AppDbContext : DbContext
             entity.ToTable("Item");  
             entity.HasKey(e => e.ItemId);
             entity.Property(e => e.ItemName).IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ReservedQuantity).HasDefaultValue(0);
         });
 
         // Конфигурация для Bom
@@ -81,10 +81,18 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.OrderId);
             entity.Property(e => e.Status).HasMaxLength(20);
             entity.Property(e => e.Comment).HasMaxLength(500);
-            entity.Property(e => e.UnitPrice).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
+        });
+
+        modelBuilder.Entity<OrderLine>(entity =>
+        {
+            entity.ToTable("OrderLines");
+            entity.HasKey(e => e.OrderLineId);
+            entity.HasOne(e => e.Order)
+                .WithMany(o => o.Lines)
+                .HasForeignKey(e => e.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.Item)
-                .WithMany(i => i.Orders)
+                .WithMany(i => i.OrderLines)
                 .HasForeignKey(e => e.ItemId)
                 .OnDelete(DeleteBehavior.Restrict);
         });

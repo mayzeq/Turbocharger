@@ -32,7 +32,6 @@ public class WarehouseController : ControllerBase
             ItemName = o.Item.ItemName,
             OperationType = o.OperationType,
             Quantity = o.Quantity,
-            UnitPrice = o.UnitPrice,
             Comment = o.Comment,
             CreatedAt = o.CreatedAt,
             OperationDate = o.OperationDate
@@ -60,7 +59,6 @@ public class WarehouseController : ControllerBase
             ItemName = o.Item.ItemName,
             OperationType = o.OperationType,
             Quantity = o.Quantity,
-            UnitPrice = o.UnitPrice,
             Comment = o.Comment,
             CreatedAt = o.CreatedAt,
             OperationDate = o.OperationDate
@@ -84,17 +82,15 @@ public class WarehouseController : ControllerBase
             if (dto.Quantity <= 0)
                 return BadRequest("Количество должно быть больше 0.");
 
-            if (dto.UnitPrice < 0)
-                return BadRequest("Цена за единицу не может быть отрицательной.");
-
             // Проверяем тип операции
             var validTypes = new[] { "Income", "Expense" };
             if (!validTypes.Contains(dto.OperationType))
                 return BadRequest("Неверный тип операции. Допустимые: Income, Expense.");
 
             // Проверка количества для расхода
-            if (dto.OperationType == "Expense" && dto.Quantity > item.CurrentQuantity)
-                return BadRequest($"Невозможно провести расход: недостаточно на складе. Доступно: {item.CurrentQuantity}, требуется: {dto.Quantity}.");
+            var currentQuantity = await GetCurrentQuantity(dto.ItemId);
+            if (dto.OperationType == "Expense" && dto.Quantity > currentQuantity)
+                return BadRequest($"Невозможно провести расход: недостаточно на складе. Доступно: {currentQuantity}, требуется: {dto.Quantity}.");
 
             // Создаём операцию
             var operation = new WarehouseOperation
@@ -102,27 +98,12 @@ public class WarehouseController : ControllerBase
                 ItemId = dto.ItemId,
                 OperationType = dto.OperationType,
                 Quantity = dto.Quantity,
-                UnitPrice = dto.UnitPrice,
                 Comment = dto.Comment,
                 CreatedAt = DateTime.UtcNow,
                 OperationDate = DateTime.SpecifyKind(dto.OperationDate, DateTimeKind.Utc)
             };
 
             _context.WarehouseOperations.Add(operation);
-
-            // Обновляем остаток
-            item.CurrentQuantity += dto.OperationType switch
-            {
-                "Income" => dto.Quantity,
-                "Expense" => -dto.Quantity,
-                _ => 0
-            };
-
-            // Обновляем цену при приходе
-            if (dto.OperationType == "Income")
-            {
-                item.PurchasePrice = dto.UnitPrice;
-            }
 
             await _context.SaveChangesAsync();
 
@@ -133,7 +114,6 @@ public class WarehouseController : ControllerBase
                 ItemName = item.ItemName,
                 OperationType = operation.OperationType,
                 Quantity = operation.Quantity,
-                UnitPrice = operation.UnitPrice,
                 Comment = operation.Comment,
                 CreatedAt = operation.CreatedAt,
                 OperationDate = operation.OperationDate
@@ -167,67 +147,18 @@ public class WarehouseController : ControllerBase
             if (dto.Quantity <= 0)
                 return BadRequest("Количество должно быть больше 0.");
 
-            if (dto.UnitPrice < 0)
-                return BadRequest("Цена за единицу не может быть отрицательной.");
-
             // Проверяем тип операции
             var validTypes = new[] { "Income", "Expense" };
             if (!validTypes.Contains(dto.OperationType))
                 return BadRequest("Неверный тип операции. Допустимые: Income, Expense.");
-
-            // Отменяем старую операцию — возвращаем количество
-            item.CurrentQuantity -= operation.OperationType switch
-            {
-                "Income" => operation.Quantity,
-                "Expense" => -operation.Quantity,
-                _ => 0
-            };
-
-            // Проверяем, что остаток не ушёл в минус после отмены
-            if (item.CurrentQuantity < 0)
-            {
-                // Откатываем изменение
-                item.CurrentQuantity += operation.OperationType switch
-                {
-                    "Income" => operation.Quantity,
-                    "Expense" => -operation.Quantity,
-                    _ => 0
-                };
-                return BadRequest($"Невозможно изменить операцию: после отмены текущей операции остаток уйдёт в минус ({item.CurrentQuantity}). Сначала измените или удалите последующие операции расхода.");
-            }
-
-            // Проверяем количество для расхода
-            if (dto.OperationType == "Expense" && dto.Quantity > item.CurrentQuantity)
-            {
-                // Откатываем изменение
-                item.CurrentQuantity += operation.OperationType switch
-                {
-                    "Income" => operation.Quantity,
-                    "Expense" => -operation.Quantity,
-                    _ => 0
-                };
-                return BadRequest($"Невозможно применить операцию: недостаточно на складе. Доступно: {item.CurrentQuantity}, требуется: {dto.Quantity}.");
-            }
-
-            // Применяем новую операцию
-            item.CurrentQuantity += dto.OperationType switch
-            {
-                "Income" => dto.Quantity,
-                "Expense" => -dto.Quantity,
-                _ => 0
-            };
-
-            // Обновляем цену при приходе
-            if (dto.OperationType == "Income")
-            {
-                item.PurchasePrice = dto.UnitPrice;
-            }
+            var projectedCurrent = await GetCurrentQuantity(dto.ItemId, operationId);
+            if (dto.OperationType == "Expense" && dto.Quantity > projectedCurrent)
+                return BadRequest($"Невозможно применить операцию: недостаточно на складе. Доступно: {projectedCurrent}, требуется: {dto.Quantity}.");
 
             // Обновляем операцию
             operation.ItemId = dto.ItemId;
             operation.OperationType = dto.OperationType;
             operation.Quantity = dto.Quantity;
-            operation.UnitPrice = dto.UnitPrice;
             operation.Comment = dto.Comment;
             operation.OperationDate = DateTime.SpecifyKind(dto.OperationDate, DateTimeKind.Utc);
 
@@ -240,7 +171,6 @@ public class WarehouseController : ControllerBase
                 ItemName = item.ItemName,
                 OperationType = operation.OperationType,
                 Quantity = operation.Quantity,
-                UnitPrice = operation.UnitPrice,
                 Comment = operation.Comment,
                 CreatedAt = operation.CreatedAt,
                 OperationDate = operation.OperationDate
@@ -267,22 +197,13 @@ public class WarehouseController : ControllerBase
             if (operation == null)
                 return NotFound("Операция не найдена.");
 
-            // Рассчитываем остаток после отмены операции
-            var newQuantity = operation.Item.CurrentQuantity - operation.OperationType switch
-            {
-                "Income" => operation.Quantity,
-                "Expense" => -operation.Quantity,
-                _ => 0
-            };
+            var newQuantity = await GetCurrentQuantity(operation.ItemId, operationId);
 
             // Проверяем, что остаток не уйдёт в минус
             if (newQuantity < 0)
             {
                 return BadRequest($"Невозможно удалить операцию: после отмены остаток уйдёт в минус ({newQuantity}). Сначала удалите или измените последующие операции расхода.");
             }
-
-            // Применяем отмену
-            operation.Item.CurrentQuantity = newQuantity;
 
             _context.WarehouseOperations.Remove(operation);
             await _context.SaveChangesAsync();
@@ -305,15 +226,47 @@ public class WarehouseController : ControllerBase
             .Select(i => new
             {
                 itemId = i.ItemId,
-                itemName = i.ItemName,
-                currentQuantity = i.CurrentQuantity,
-                reservedQuantity = i.ReservedQuantity,
-                availableQuantity = i.CurrentQuantity - i.ReservedQuantity,
-                purchasePrice = i.PurchasePrice,
-                totalValue = i.CurrentQuantity * i.PurchasePrice
+                itemName = i.ItemName
             })
             .ToListAsync();
 
-        return Ok(stock);
+        var operationRows = await _context.WarehouseOperations
+            .Select(o => new { o.ItemId, o.OperationType, o.Quantity })
+            .ToListAsync();
+        var reservedRows = await _context.OrderLines
+            .Where(l => l.Order.Status == "Confirmed")
+            .GroupBy(l => l.ItemId)
+            .Select(g => new { ItemId = g.Key, Quantity = g.Sum(x => x.Quantity) })
+            .ToListAsync();
+
+        var currentByItem = operationRows
+            .GroupBy(o => o.ItemId)
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.OperationType == "Income" ? x.Quantity : -x.Quantity));
+        var reservedByItem = reservedRows.ToDictionary(x => x.ItemId, x => x.Quantity);
+
+        var result = stock.Select(i =>
+        {
+            var current = currentByItem.TryGetValue(i.itemId, out var c) ? c : 0;
+            var reserved = reservedByItem.TryGetValue(i.itemId, out var r) ? r : 0;
+            return new
+            {
+                i.itemId,
+                i.itemName,
+                currentQuantity = current,
+                reservedQuantity = reserved,
+                availableQuantity = current - reserved
+            };
+        });
+
+        return Ok(result);
+    }
+
+    private async Task<int> GetCurrentQuantity(int itemId, int? excludingOperationId = null)
+    {
+        var query = _context.WarehouseOperations.AsQueryable().Where(o => o.ItemId == itemId);
+        if (excludingOperationId.HasValue)
+            query = query.Where(o => o.OperationId != excludingOperationId.Value);
+
+        return await query.SumAsync(o => o.OperationType == "Income" ? o.Quantity : -o.Quantity);
     }
 }
