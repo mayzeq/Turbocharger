@@ -1,4 +1,4 @@
-﻿/* Ҹ���� ���� � ����������� ��������� */
+﻿/* Переменные темы и палитра */
 :root {
     --bg-primary: #fff7ed;
     --bg-secondary: #ffedd5;
@@ -41,7 +41,7 @@ body {
     width: min(1400px, 100%);
 }
 
-/* ������� */
+/* Боковая панель */
 .sidebar {
     width: 260px;
     background: var(--bg-secondary);
@@ -101,7 +101,7 @@ body {
         font-weight: normal;
     }
 
-/* �������� ������� */
+/* Основная область контента */
 .content {
     flex: 1;
     padding: 2rem;
@@ -285,7 +285,7 @@ body {
     margin-right: 0;
 }
 
-/* BOM controls */
+/* Элементы управления BOM */
 .bom-controls {
     display: flex;
     align-items: center;
@@ -315,7 +315,7 @@ body {
             box-shadow: 0 0 0 3px var(--accent-light);
         }
 
-/* Tree flat */
+/* Контейнер плоского дерева спецификации */
 .tree-container {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -326,7 +326,7 @@ body {
     overflow-y: auto;
 }
 
-/* ����� ��� ��������� �������� � ������ ��������� */
+/* Корневой элемент дерева BOM */
 .tree-item.root-item {
     background: var(--bg-tertiary);
     border-left: 3px solid var(--accent);
@@ -384,7 +384,7 @@ body {
     margin-left: 0.5rem;
 }
 
-/* Hierarchy tree */
+/* Дерево иерархии */
 .hierarchy-container {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -412,7 +412,7 @@ body {
         border-left: 2px dashed var(--border);
     }
 
-/* ����� ��� ��������� �������� � �������� */
+/* Корневой узел иерархии */
 .hierarchy-node.root-node {
     background: var(--bg-tertiary);
     border-left: 3px solid var(--accent);
@@ -471,7 +471,7 @@ body {
     white-space: nowrap;
 }
 
-/* Calculator */
+/* Калькулятор потребности */
 .calculator {
     max-width: 800px;
     background: var(--bg-secondary);
@@ -550,7 +550,7 @@ body {
     background: var(--accent);
 }
 
-/* Warehouse */
+/* Склад */
 .warehouse-content {
     display: flex;
     flex-direction: column;
@@ -565,7 +565,7 @@ body {
     color: var(--text-primary);
 }
 
-/* Modals */
+/* Модальные окна */
 .modal {
     display: none;
     position: fixed;
@@ -691,7 +691,7 @@ body {
     background: #9f1239;
 }
 
-/* ����� ��� ������� �������� */
+/* Бейджи прихода и расхода */
 .badge.income {
     background: var(--accent);
 }
@@ -701,7 +701,7 @@ body {
 }
 
 
-/* ����� ��� ������ ������ ������ */
+/* Кнопки в строках дерева BOM */
 .tree-item .btn-sm {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
@@ -714,7 +714,7 @@ body {
         border-color: var(--accent);
     }
 
-/* ����� ��� ���������� */
+/* Полоса прокрутки (WebKit) */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -734,7 +734,7 @@ body {
         background: var(--accent-hover);
     }
 
-/* ������������ */
+/* Адаптивная вёрстка */
 @media (max-width: 768px) {
     .sidebar {
         width: 80px;
@@ -799,7 +799,7 @@ body {
     }
 }
 
-/* �������� �������� */
+/* Анимация загрузки */
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
