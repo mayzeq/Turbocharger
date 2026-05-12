@@ -2,7 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Turbocharger.Storage;
 using Turbocharger.Domain.Entities;
-using Turbocharger.ValueObjects;
+using Turbocharger.Domain.ValueObjects;
 
 namespace Turbocharger.Controllers;
 

@@ -44,7 +44,7 @@ public class Program
             {
                 Title = "Turbocharger MRP API",
                 Version = "v1",
-                Description = "API ��� ���������� ���������� ����������������",
+                Description = "API учёта номенклатуры, спецификаций, склада и заказов.",
                 Contact = new Microsoft.OpenApi.Models.OpenApiContact { Name = "Turbocharger System" }
             });
         });

@@ -56,7 +56,7 @@ public class BomController : ControllerBase
             .FirstOrDefaultAsync();
 
         if (bom == null)
-            return NotFound($"˜˜˜˜˜ BOM ˜ ID {id} ˜˜ ˜˜˜˜˜˜˜");
+            return NotFound($"????? BOM ? ID {id} ?? ???????.");
 
         return Ok(bom);
     }
@@ -66,7 +66,7 @@ public class BomController : ControllerBase
     {
         var parentExists = await _context.Item.AnyAsync(i => i.ItemId == parentId);
         if (!parentExists)
-            return NotFound($"˜˜˜˜˜˜˜˜ ˜ ID {parentId} ˜˜ ˜˜˜˜˜˜");
+            return NotFound($"??????? ? ID {parentId} ?? ??????.");
 
         var boms = await _context.BOM
             .Include(b => b.Component)
@@ -88,20 +88,20 @@ public class BomController : ControllerBase
     public async Task<ActionResult<BomResponseDto>> PostBom([FromBody] BomCreateDto dto)
     {
         if (dto.Quantity <= 0)
-            return BadRequest("˜˜˜˜˜˜˜˜˜˜ ˜ ˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜ ˜˜˜˜ ˜˜˜˜˜˜ 0.");
+            return BadRequest("?????????? ? ????? ?????? ???? ?????? 0.");
 
         var component = await _context.Item.FindAsync(dto.ComponentId);
         if (component == null)
-            return BadRequest($"˜˜˜˜˜˜˜˜˜ ˜ ID {dto.ComponentId} ˜˜ ˜˜˜˜˜˜˜˜˜˜");
+            return BadRequest($"????????? ? ID {dto.ComponentId} ?? ??????.");
 
         if (dto.ParentId.HasValue)
         {
             var parent = await _context.Item.FindAsync(dto.ParentId.Value);
             if (parent == null)
-                return BadRequest($"˜˜˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜˜ ˜ ID {dto.ParentId.Value} ˜˜ ˜˜˜˜˜˜˜˜˜˜");
+                return BadRequest($"???????? ? ID {dto.ParentId.Value} ?? ??????.");
 
             if (await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-                return BadRequest("˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜ ˜˜˜˜˜ ˜˜˜˜˜˜˜˜ ˜ ˜˜˜˜˜");
+                return BadRequest("????? ????? ??????? ???? ? ?????????.");
         }
 
         var exists = await _context.BOM.AnyAsync(b =>
@@ -109,7 +109,7 @@ public class BomController : ControllerBase
             b.ComponentId == dto.ComponentId);
 
         if (exists)
-            return BadRequest("˜˜˜˜˜ ˜˜˜˜˜ ˜˜˜ ˜˜˜˜˜˜˜˜˜˜");
+            return BadRequest("????? ? ????? ????????? ? ??????????? ??? ??????????.");
 
         var bom = new Bom
         {
@@ -141,22 +141,22 @@ public class BomController : ControllerBase
     public async Task<IActionResult> PutBom(int id, [FromBody] BomCreateDto dto)
     {
         if (dto.Quantity <= 0)
-            return BadRequest("˜˜˜˜˜˜˜˜˜˜ ˜ ˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜ ˜˜˜˜ ˜˜˜˜˜˜ 0.");
+            return BadRequest("?????????? ? ????? ?????? ???? ?????? 0.");
 
         var bom = await _context.BOM.FindAsync(id);
         if (bom == null)
-            return NotFound($"˜˜˜˜˜ BOM ˜ ID {id} ˜˜ ˜˜˜˜˜˜˜");
+            return NotFound($"????? BOM ? ID {id} ?? ???????.");
 
         if (!await _context.Item.AnyAsync(i => i.ItemId == dto.ComponentId))
-            return BadRequest($"˜˜˜˜˜˜˜˜˜ ˜ ID {dto.ComponentId} ˜˜ ˜˜˜˜˜˜˜˜˜˜");
+            return BadRequest($"????????? ? ID {dto.ComponentId} ?? ??????.");
 
-        if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.ItemId == dto.ParentId))
-            return BadRequest($"˜˜˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜˜˜˜ ˜ ID {dto.ParentId} ˜˜ ˜˜˜˜˜˜˜˜˜˜");
+        if (dto.ParentId.HasValue && !await _context.Item.AnyAsync(i => i.ItemId == dto.ParentId.Value))
+            return BadRequest($"???????? ? ID {dto.ParentId.Value} ?? ??????.");
 
         if ((bom.ParentId != dto.ParentId || bom.ComponentId != dto.ComponentId) &&
             dto.ParentId.HasValue &&
             await WouldCreateCycle(dto.ParentId.Value, dto.ComponentId))
-            return BadRequest("˜˜˜˜˜˜˜˜˜˜ ˜˜˜˜ ˜˜˜˜˜ ˜˜˜˜˜˜˜˜ ˜ ˜˜˜˜˜");
+            return BadRequest("????? ????? ??????? ???? ? ?????????.");
 
         bom.ParentId = dto.ParentId;
         bom.ComponentId = dto.ComponentId;
@@ -175,12 +175,12 @@ public class BomController : ControllerBase
             .Include(b => b.Component)
             .FirstOrDefaultAsync(b => b.BomId == id);
         if (bom == null)
-            return NotFound($"˜˜˜˜˜ BOM ˜ ID {id} ˜˜ ˜˜˜˜˜˜˜");
+            return NotFound($"????? BOM ? ID {id} ?? ???????.");
 
         var parentUsedInOrder = bom.ParentId.HasValue && await _context.OrderLines.AnyAsync(l => l.ItemId == bom.ParentId.Value);
         var componentUsedInOrder = await _context.OrderLines.AnyAsync(l => l.ItemId == bom.ComponentId);
         if (parentUsedInOrder || componentUsedInOrder)
-            return BadRequest("????? ?????? ???????: ???? ?? ????????? ??? ???????????? ? ???????.");
+            return BadRequest("?????? ??????? ?????: ???????? ??? ????????? ?????? ? ???????.");
 
         _context.BOM.Remove(bom);
         await _context.SaveChangesAsync();

@@ -100,13 +100,9 @@ public class TurbochargerController : ControllerBase
 
         foreach (var child in children)
         {
-            var childNode = await BuildTree(child.ComponentId, child.Quantity, level + 1);
+            var childNode = await BuildTree(child.ComponentId, quantity * child.Quantity, level + 1);
             if (childNode != null)
-            {
-                // Умножаем количество дочерних элементов на количество родителей
-                childNode.TotalQuantity = quantity * child.Quantity;
                 node.Children.Add(childNode);
-            }
         }
 
         return node;
@@ -149,7 +145,7 @@ public class TurbochargerController : ControllerBase
 
         foreach (var child in children)
         {
-            await BuildStructureText(child.ComponentId, child.Quantity, level + 1, sb);
+            await BuildStructureText(child.ComponentId, quantity * child.Quantity, level + 1, sb);
         }
     }
 }

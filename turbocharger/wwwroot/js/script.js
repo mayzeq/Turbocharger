@@ -162,7 +162,7 @@ function renderItems(itemsArray) {
     const tbody = document.getElementById('items-table');
     tbody.innerHTML = itemsArray.map(item => `
         <tr>
-            <td><strong>${item.itemId}</strong>${item.componentId || ''}</td>
+            <td><strong>${item.itemId}</strong></td>
             <td>${item.itemName}</td>
             <td class="actions">
                 <button class="btn btn-sm btn-secondary" onclick="editItem(${item.itemId})">Изменить</button>

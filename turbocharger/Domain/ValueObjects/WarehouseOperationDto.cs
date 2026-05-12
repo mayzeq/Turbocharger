@@ -1,4 +1,4 @@
-﻿namespace Turbocharger.ValueObjects;
+﻿namespace Turbocharger.Domain.ValueObjects;
 
 public class WarehouseOperationDto
 {
