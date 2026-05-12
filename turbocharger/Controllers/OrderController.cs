@@ -384,6 +384,6 @@ public class OrderController : ControllerBase
 
     private sealed record ItemBalance(int CurrentQuantity, int ReservedQuantity)
     {
-        public int AvailableQuantity => CurrentQuantity - ReservedQuantity;
+        public int AvailableQuantity => Math.Max(0, CurrentQuantity - ReservedQuantity);
     }
 }

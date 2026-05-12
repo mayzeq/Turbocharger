@@ -248,13 +248,15 @@ public class WarehouseController : ControllerBase
         {
             var current = currentByItem.TryGetValue(i.itemId, out var c) ? c : 0;
             var reserved = reservedByItem.TryGetValue(i.itemId, out var r) ? r : 0;
+            // Резерв по подтверждённым заказам может превышать физический остаток — «доступно» не уходит в минус.
+            var available = Math.Max(0, current - reserved);
             return new
             {
                 i.itemId,
                 i.itemName,
                 currentQuantity = current,
                 reservedQuantity = reserved,
-                availableQuantity = current - reserved
+                availableQuantity = available
             };
         });
 

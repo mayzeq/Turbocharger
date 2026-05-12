@@ -16,6 +16,37 @@ function formatDateTime(value) {
     return value ? new Date(value).toLocaleString('ru-RU') : '—';
 }
 
+/** Номенклатура /api/Item не содержит остатков — берём из /api/Warehouse/stock. */
+async function getStockQuantityByItemId() {
+    const map = {};
+    try {
+        const res = await fetch(`${API}/Warehouse/stock`);
+        if (!res.ok) return map;
+        const stock = await res.json();
+        for (const row of stock) {
+            map[row.itemId] = Number(row.currentQuantity) || 0;
+        }
+    } catch {
+        /* без сети оставляем нули */
+    }
+    return map;
+}
+
+function formatStockQty(value) {
+    return Math.floor(Number(value) || 0);
+}
+
+async function fillOperationItemSelect() {
+    const itemSelect = document.getElementById('op-item');
+    if (!itemSelect) return;
+    const stockById = await getStockQuantityByItemId();
+    const sortedItems = [...items].sort((a, b) => a.itemId - b.itemId);
+    itemSelect.innerHTML = sortedItems.map(item => {
+        const qty = formatStockQty(stockById[item.itemId]);
+        return `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (остаток: ${qty})</option>`;
+    }).join('');
+}
+
 function ensureNotificationContainer() {
     let container = document.getElementById('app-notifications');
     if (!container) {
@@ -613,10 +644,7 @@ if (calcBtn) {
                 html += `
                     <div class="result-item">
                         <span>${item ? item.itemName : 'Неизвестно'} (ID ${compId})</span>
-                        <span>
-                            <strong>${totalQty}</strong> 
-                            <span class="badge shortage">недостаток: ${shortage}</span>
-                        </span>
+                        <span><span class="badge shortage">нехватка: ${shortage}</span></span>
                     </div>
                 `;
             } else {
@@ -653,15 +681,20 @@ async function loadStock() {
         const tbody = document.getElementById('stock-table');
         if (!tbody) return;
 
-        tbody.innerHTML = stock.map(item => `
+        tbody.innerHTML = stock.map(item => {
+            const cur = Math.floor(Number(item.currentQuantity) || 0);
+            const res = Math.floor(Number(item.reservedQuantity) || 0);
+            const avail = Math.max(0, Math.floor(Number(item.availableQuantity ?? (cur - res)) || 0));
+            return `
              <tr>
                 <td><strong>${item.itemId}</strong></td>
                 <td>${item.itemName}</td>
-                <td>${Math.floor(item.currentQuantity)}</td>
-                <td>${Math.floor(item.reservedQuantity || 0)}</td>
-                <td>${Math.floor(item.availableQuantity ?? (item.currentQuantity - (item.reservedQuantity || 0)))}</td>
+                <td>${cur}</td>
+                <td>${res}</td>
+                <td>${avail}</td>
              </tr>
-        `).join('');
+        `;
+        }).join('');
     } catch (err) {
         showErrorNotification(err.message);
     }
@@ -712,20 +745,14 @@ function initOperationModal() {
     const form = document.getElementById('operation-form');
 
     if (openBtn) {
-        openBtn.addEventListener('click', () => {
+        openBtn.addEventListener('click', async () => {
             document.getElementById('operation-modal-title').textContent = 'Новая операция';
             document.getElementById('op-type').value = 'Income';
-            document.getElementById('op-quantity').value = '';
+            document.getElementById('op-quantity').value = '1';
             document.getElementById('op-date').value = toDateTimeLocalValue();
             document.getElementById('op-comment').value = '';
 
-            const sortedItems = [...items].sort((a, b) => a.itemId - b.itemId);
-            const itemSelect = document.getElementById('op-item');
-            if (itemSelect) {
-                itemSelect.innerHTML = sortedItems.map(item =>
-                    `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (остаток: ${Math.floor(item.currentQuantity)})</option>`
-                ).join('');
-            }
+            await fillOperationItemSelect();
 
             modal.classList.add('active');
         });
@@ -776,7 +803,7 @@ function initOperationModal() {
                 await loadWarehouseData(); // Обновляем складские данные
 
                 // Если активен калькулятор, обновляем результаты
-                if (document.getElementById('calculator-view').classList.contains('active')) {
+                if (document.getElementById('calculator-view')?.classList?.contains('active')) {
                     const calcBtn = document.getElementById('calc-btn');
                     if (calcBtn) calcBtn.click();
                 }
@@ -799,6 +826,7 @@ window.editOperation = async function (id) {
         if (!op) return;
 
         document.getElementById('operation-modal-title').textContent = 'Редактировать операцию';
+        await fillOperationItemSelect();
         document.getElementById('op-item').value = op.itemId;
         document.getElementById('op-type').value = op.operationType;
         document.getElementById('op-quantity').value = op.quantity;
@@ -830,7 +858,7 @@ window.deleteOperation = async function (id) {
         await loadWarehouseData();
 
         // Если активен калькулятор, обновляем результаты
-        if (document.getElementById('calculator-view').classList.contains('active')) {
+        if (document.getElementById('calculator-view')?.classList?.contains('active')) {
             const calcBtn = document.getElementById('calc-btn');
             if (calcBtn) calcBtn.click();
         }
@@ -907,7 +935,7 @@ async function updateOrderSellableSelect() {
         }
 
         itemSelect.innerHTML = sellableItems.map(item =>
-            `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (доступно: ${Math.floor(item.availableQuantity)})</option>`
+            `<option value="${item.itemId}">${item.itemId} — ${item.itemName} (доступно: ${Math.max(0, Math.floor(Number(item.availableQuantity) || 0))})</option>`
         ).join('');
     } catch (err) {
         showErrorNotification(err.message);
@@ -934,7 +962,7 @@ function initOrderModal() {
             await updateOrderSellableSelect();
             orderLinesDraft = [];
             renderOrderLinesDraft();
-            document.getElementById('order-quantity').value = '';
+            document.getElementById('order-quantity').value = '1';
             document.getElementById('order-date').value = toDateTimeLocalValue();
             document.getElementById('order-due-date').value = toDateTimeLocalValue(new Date(Date.now() + 24 * 60 * 60 * 1000));
             document.getElementById('order-comment').value = '';
@@ -959,7 +987,7 @@ function initOrderModal() {
                 orderLinesDraft.push({ itemId, itemName: selected?.itemName || `ID ${itemId}`, quantity });
             }
 
-            document.getElementById('order-quantity').value = '';
+            document.getElementById('order-quantity').value = '1';
             renderOrderLinesDraft();
         });
     }
@@ -1002,7 +1030,7 @@ function initOrderModal() {
             await loadWarehouseData();
             await loadOrdersData();
 
-            if (document.getElementById('calculator-view').classList.contains('active')) {
+            if (document.getElementById('calculator-view')?.classList?.contains('active')) {
                 document.getElementById('calc-btn')?.click();
             }
         } catch (err) {
@@ -1045,24 +1073,20 @@ async function loadOrdersMrpShortages() {
         const rows = await response.json();
 
         if (!rows.length) {
-            container.innerHTML = '<h4>MRP дефицит</h4><p>Дефицитов по активным заказам не найдено.</p>';
+            container.innerHTML = '<h4>Нехватка по заказам</h4><p>По активным заказам нехваток нет.</p>';
             return;
         }
 
         const itemsHtml = rows.map(row => `
             <div class="result-item">
                 <span>${row.itemName} (ID ${row.itemId})</span>
-                <span>
-                    нужно: <strong>${row.requiredQuantity}</strong>,
-                    доступно: ${row.availableQuantity},
-                    <span class="badge shortage">дефицит: ${row.shortageQuantity}</span>
-                </span>
+                <span><span class="badge shortage">нехватка: ${row.shortageQuantity}</span></span>
             </div>
         `).join('');
 
-        container.innerHTML = `<h4>MRP дефицит</h4>${itemsHtml}`;
+        container.innerHTML = `<h4>Нехватка по заказам</h4>${itemsHtml}`;
     } catch (err) {
-        showErrorNotification('Не удалось рассчитать MRP: ' + err.message);
+        showErrorNotification('Не удалось рассчитать нехватку по заказам: ' + err.message);
     }
 }
 
