@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> Turbocharger MRP System</title>
-    <link rel="stylesheet" href="/css/style.css?v=8">
+    <link rel="stylesheet" href="/css/style.css?v=11">
 </head>
 <body>
     <div class="app">
@@ -131,22 +131,41 @@
                 <div class="orders-note">
                     Продавать можно только изделия и узлы (не нижний уровень деталей).
                 </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Дата заказа</th>
-                                <th>Срок</th>
-                                <th>Позиции</th>
-                                <th>Статус</th>
-                                <th>Комментарий</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="orders-table"></tbody>
-                    </table>
+                <div class="orders-content">
+                    <div class="orders-list">
+                        <h3>Список заказов</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Дата заказа</th>
+                                        <th>Срок</th>
+                                        <th>Позиции</th>
+                                        <th>Статус</th>
+                                        <th>Комментарий</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orders-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="orders-mrp-section" id="orders-mrp-section" hidden>
+                        <h3>Нехватка по заказам</h3>
+                        <div class="table-container">
+                            <table class="data-table data-table--mrp">
+                                <thead>
+                                    <tr>
+                                        <th class="col-id">ID</th>
+                                        <th>Наименование</th>
+                                        <th class="col-num">Нехватка</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orders-mrp-table"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
-                <div class="results" id="orders-mrp-results"></div>
             </div>
         </main>
     </div>
@@ -282,6 +301,6 @@
         </div>
     </div>
 
-    <script src="/js/script.js?v=7"></script>
+    <script src="/js/script.js?v=10"></script>
 </body>
 </html>

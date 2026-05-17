@@ -285,6 +285,51 @@ body {
     margin-right: 0;
 }
 
+/* Таблица «Нехватка по заказам» */
+.orders-mrp-section .data-table--mrp {
+    table-layout: auto;
+}
+
+.orders-mrp-section .data-table--mrp th,
+.orders-mrp-section .data-table--mrp td {
+    vertical-align: middle;
+}
+
+.orders-mrp-section .data-table--mrp th {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.orders-mrp-section .data-table--mrp .col-id {
+    width: 4.5rem;
+    text-align: center;
+}
+
+.orders-mrp-section .data-table--mrp .col-id strong {
+    color: var(--accent);
+}
+
+.orders-mrp-section .data-table--mrp .col-num,
+.orders-mrp-section .data-table--mrp th.col-num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.orders-mrp-section .data-table--mrp .col-name {
+    min-width: 12rem;
+}
+
+.orders-mrp-section .data-table--mrp tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.orders-mrp-section .data-table td.col-empty {
+    text-align: center;
+    font-style: italic;
+    color: var(--text-secondary);
+    padding: 1.25rem;
+}
+
 /* Элементы управления BOM */
 .bom-controls {
     display: flex;
@@ -559,6 +604,21 @@ body {
 
 .stock-summary h3,
 .operations-history h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+/* Заказы */
+.orders-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.orders-list h3,
+.orders-mrp-section h3 {
     font-size: 1.1rem;
     font-weight: 600;
     margin-bottom: 1rem;

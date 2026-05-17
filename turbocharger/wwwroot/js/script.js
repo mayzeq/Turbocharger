@@ -1064,27 +1064,33 @@ window.removeOrderLineDraft = function (index) {
 };
 
 async function loadOrdersMrpShortages() {
-    const container = document.getElementById('orders-mrp-results');
-    if (!container) return;
+    const section = document.getElementById('orders-mrp-section');
+    const tbody = document.getElementById('orders-mrp-table');
+    if (!section || !tbody) return;
 
     try {
         const response = await fetch(`${API}/Order/mrp-shortages`);
         if (!response.ok) throw new Error(await getApiErrorMessage(response));
         const rows = await response.json();
 
+        section.hidden = false;
+
         if (!rows.length) {
-            container.innerHTML = '<h4>Нехватка по заказам</h4><p>По активным заказам нехваток нет.</p>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="col-empty">По активным заказам нехваток нет.</td>
+                </tr>
+            `;
             return;
         }
 
-        const itemsHtml = rows.map(row => `
-            <div class="result-item">
-                <span>${row.itemName} (ID ${row.itemId})</span>
-                <span><span class="badge shortage">нехватка: ${row.shortageQuantity}</span></span>
-            </div>
+        tbody.innerHTML = rows.map(row => `
+            <tr>
+                <td class="col-id"><strong>${row.itemId}</strong></td>
+                <td class="col-name">${row.itemName}</td>
+                <td class="col-num"><span class="badge shortage">нехватка: ${row.shortageQuantity}</span></td>
+            </tr>
         `).join('');
-
-        container.innerHTML = `<h4>Нехватка по заказам</h4>${itemsHtml}`;
     } catch (err) {
         showErrorNotification('Не удалось рассчитать нехватку по заказам: ' + err.message);
     }
